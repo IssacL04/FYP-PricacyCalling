@@ -1,0 +1,23 @@
+{
+  "name": "privacy-calling-server",
+  "version": "1.0.0",
+  "description": "Lightweight privacy-calling backend using Asterisk + Node.js + SQLite",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test",
+    "db:init": "node scripts/init-db.js",
+    "db:seed": "node scripts/seed-demo.js"
+  },
+  "keywords": [
+    "sip",
+    "asterisk",
+    "privacy-calling"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "express": "^5.2.1"
+  }
+}

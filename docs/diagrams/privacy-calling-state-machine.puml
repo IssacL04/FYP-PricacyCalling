@@ -1,0 +1,29 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName "Noto Sans CJK SC"
+
+[*] --> created : createCallWithLegs
+created --> originating : AMI Originate 发送
+originating --> ringing : OriginateResponse Success
+originating --> failed : OriginateResponse Failure
+
+ringing --> answered : A-leg answered
+ringing --> failed : B-leg fail (busy/noanswer/cancel/...)
+
+answered --> bridged : B-leg answered
+answered --> failed : Hangup before bridge
+
+bridged --> completed : ALL hangup\n且曾成功桥接
+bridged --> failed : ALL hangup\n且失败原因已存在
+
+failed --> [*]
+completed --> [*]
+
+note right of failed
+  failure_reason 来源：
+  - AMI 失败响应
+  - DialStatus / HangupCause
+  - originate 超时/拒绝
+end note
+
+@enduml

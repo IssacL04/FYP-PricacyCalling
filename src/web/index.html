@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Calling 控制台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/dashboard/styles.css" />
+  </head>
+  <body>
+    <div class="ambient-bg" aria-hidden="true"></div>
+    <header class="top-bar animate-in">
+      <div>
+        <p class="overline">Privacy Calling</p>
+        <h1>服务运维面板</h1>
+      </div>
+      <div class="toolbar">
+        <button id="refreshBtn" class="btn tonal" type="button">刷新</button>
+        <span id="connectionBadge" class="badge warn">未连接</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="card auth-card animate-in" style="--delay: 40ms">
+        <h2>API Key</h2>
+        <p class="muted">页面操作会调用受保护的 `/v1/ops/*` 接口，请先输入与你服务端一致的 `x-api-key`。</p>
+        <form id="apiKeyForm" class="auth-form">
+          <input id="apiKeyInput" type="password" placeholder="输入 API Key" autocomplete="off" />
+          <button class="btn filled" type="submit">保存并连接</button>
+        </form>
+        <p id="statusText" class="status-text">等待连接...</p>
+      </section>
+
+      <section class="card summary-card animate-in" style="--delay: 90ms">
+        <h2>系统概览</h2>
+        <div id="overviewGrid" class="overview-grid">
+          <article>
+            <p class="label">主机</p>
+            <p id="hostValue" class="value">-</p>
+          </article>
+          <article>
+            <p class="label">运行时长</p>
+            <p id="uptimeValue" class="value">-</p>
+          </article>
+          <article>
+            <p class="label">DB</p>
+            <p id="dbValue" class="value">-</p>
+          </article>
+          <article>
+            <p class="label">AMI</p>
+            <p id="amiValue" class="value">-</p>
+          </article>
+        </div>
+        <div class="memory-strip">
+          <span id="rssValue">RSS -</span>
+          <span id="heapValue">Heap -</span>
+        </div>
+      </section>
+
+      <section class="card services-card animate-in" style="--delay: 130ms">
+        <div class="section-head">
+          <h2>服务状态与快捷操作</h2>
+          <span class="muted">受管服务：Asterisk + API</span>
+        </div>
+        <div id="servicesGrid" class="services-grid"></div>
+      </section>
+
+      <section class="card stats-card animate-in" style="--delay: 170ms">
+        <h2>通话统计</h2>
+        <div id="statsGrid" class="stats-grid"></div>
+      </section>
+
+      <section class="card calls-card animate-in" style="--delay: 210ms">
+        <h2>最近通话</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Call ID</th>
+                <th>状态</th>
+                <th>Caller</th>
+                <th>Callee</th>
+                <th>虚拟号</th>
+                <th>创建时间</th>
+              </tr>
+            </thead>
+            <tbody id="recentCallsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="/dashboard/app.js" defer></script>
+  </body>
+  </html>
