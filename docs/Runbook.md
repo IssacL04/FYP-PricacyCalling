@@ -107,6 +107,10 @@ sudo systemctl enable --now asterisk privacy-calling-api
 1. 查看服务状态（`asterisk`、`privacy-calling-api`）
 2. 查看 API/DB/AMI 健康与最近通话
 3. 一键 `start/stop/restart` 服务
+4. 查看告警中心（warning/error 聚合）
+5. 查看服务器负载曲线（2 秒刷新，默认 10 分钟窗口）
+6. 查看分级日志（`debug/info/warning/error` 高亮、关键词过滤、JSON 导出）
+7. 查看操作审计时间线（落库到 SQLite）
 
 说明：
 1. 最近通话现在同时包含 `POST /v1/calls` 回拨呼叫与客户端直拨呼叫
@@ -119,6 +123,20 @@ SYSTEMCTL_BIN="$(command -v systemctl)"
 echo "ubuntu ALL=(root) NOPASSWD: ${SYSTEMCTL_BIN} start asterisk, ${SYSTEMCTL_BIN} stop asterisk, ${SYSTEMCTL_BIN} restart asterisk, ${SYSTEMCTL_BIN} start privacy-calling-api, ${SYSTEMCTL_BIN} stop privacy-calling-api, ${SYSTEMCTL_BIN} restart privacy-calling-api" | sudo tee /etc/sudoers.d/privacy-calling-ops
 sudo chmod 440 /etc/sudoers.d/privacy-calling-ops
 sudo systemctl restart privacy-calling-api
+```
+
+日志排查接口示例（需 API Key）：
+
+```bash
+curl -H 'x-api-key: change-me-api-key' \
+  'http://127.0.0.1:8080/v1/ops/logs?services=privacy-calling-api,asterisk,asterisk-full&levels=warning,error&since_sec=600&limit=100'
+```
+
+审计排查接口示例（需 API Key）：
+
+```bash
+curl -H 'x-api-key: change-me-api-key' \
+  'http://127.0.0.1:8080/v1/ops/audit-events?limit=30'
 ```
 
 ---

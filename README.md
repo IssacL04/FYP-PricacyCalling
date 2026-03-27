@@ -10,6 +10,7 @@
 - `GET /v1/calls/{id}` 查询会话状态
 - `GET /health` 健康检查
 - `GET /dashboard` Material You 风格运维面板（服务状态/快捷操作）
+- Dashboard V2：告警中心、服务器负载曲线、分级日志高亮、操作审计时间线
 - 运维面板“最近通话”同时覆盖 API 回拨与客户端直拨
 - `GET /v1/capacity/engset` Engset 阻塞概率计算
 - `GET /v1/capacity/privacy-exhaustion` 虚拟号耗尽概率计算
@@ -100,6 +101,22 @@ curl -H 'x-api-key: change-me-api-key' \
 ```bash
 curl -H 'x-api-key: change-me-api-key' \
   'http://127.0.0.1:8080/v1/ops/overview'
+```
+
+### 运维日志查询
+```bash
+curl -H 'x-api-key: change-me-api-key' \
+  'http://127.0.0.1:8080/v1/ops/logs?services=privacy-calling-api,asterisk,asterisk-full&levels=warning,error&since_sec=600&limit=100'
+```
+
+### 运维审计事件
+```bash
+curl -H 'x-api-key: change-me-api-key' \
+  'http://127.0.0.1:8080/v1/ops/audit-events?limit=20'
+
+curl -X POST -H 'x-api-key: change-me-api-key' -H 'Content-Type: application/json' \
+  'http://127.0.0.1:8080/v1/ops/audit-events' \
+  -d '{"action":"logs_manual_refresh","target":"dashboard.logs","result":"success","details":{"source":"manual"}}'
 ```
 
 ### 容量计算

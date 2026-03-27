@@ -1,9 +1,22 @@
+const MAX_HISTORY_POINTS = 300;
+const POLL_INTERVAL_MS = 2000;
+
 const state = {
   apiKey: '',
-  refreshing: false,
+  pollInFlight: false,
   actionInFlight: new Set(),
   overview: null,
-  timer: null
+  timer: null,
+  history: [],
+  logs: [],
+  logsWarnings: [],
+  logsQuery: null,
+  logsTailEnabled: true,
+  logsKeyword: '',
+  availableLogServices: ['privacy-calling-api', 'asterisk', 'asterisk-full'],
+  selectedLogServices: ['privacy-calling-api', 'asterisk', 'asterisk-full'],
+  selectedLogLevels: ['debug', 'info', 'warning', 'error'],
+  auditEvents: []
 };
 
 const els = {
@@ -18,16 +31,36 @@ const els = {
   amiValue: document.getElementById('amiValue'),
   rssValue: document.getElementById('rssValue'),
   heapValue: document.getElementById('heapValue'),
+  loadValue: document.getElementById('loadValue'),
+  alertsCount: document.getElementById('alertsCount'),
+  alertsList: document.getElementById('alertsList'),
+  chartMeta: document.getElementById('chartMeta'),
+  lineLoad: document.getElementById('lineLoad'),
+  lineHeap: document.getElementById('lineHeap'),
+  lineCalls: document.getElementById('lineCalls'),
+  legendLoad: document.getElementById('legendLoad'),
+  legendHeap: document.getElementById('legendHeap'),
+  legendCalls: document.getElementById('legendCalls'),
   servicesGrid: document.getElementById('servicesGrid'),
   statsGrid: document.getElementById('statsGrid'),
   recentCallsBody: document.getElementById('recentCallsBody'),
+  logsMeta: document.getElementById('logsMeta'),
+  logsServiceFilters: document.getElementById('logsServiceFilters'),
+  logsLevelFilters: document.getElementById('logsLevelFilters'),
+  logsKeywordInput: document.getElementById('logsKeywordInput'),
+  logsTailBtn: document.getElementById('logsTailBtn'),
+  logsManualBtn: document.getElementById('logsManualBtn'),
+  logsExportBtn: document.getElementById('logsExportBtn'),
+  logsWarnings: document.getElementById('logsWarnings'),
+  logsBody: document.getElementById('logsBody'),
+  auditList: document.getElementById('auditList'),
   toast: document.getElementById('toast')
 };
 
 function showToast(text) {
   els.toast.textContent = text;
   els.toast.classList.add('show');
-  window.setTimeout(() => els.toast.classList.remove('show'), 2400);
+  window.setTimeout(() => els.toast.classList.remove('show'), 2600);
 }
 
 function setBadge(element, text, level) {
@@ -47,6 +80,21 @@ function formatUptime(seconds) {
   return `${h}h ${m}m`;
 }
 
+function formatPercent(value, digits = 1) {
+  return `${(Number(value || 0) * 100).toFixed(digits)}%`;
+}
+
+function formatTimestamp(value) {
+  if (!value) {
+    return '-';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+  return date.toLocaleString();
+}
+
 function request(path, { method = 'GET', body } = {}) {
   if (!state.apiKey) {
     return Promise.reject(new Error('请先填写 API Key'));
@@ -55,6 +103,7 @@ function request(path, { method = 'GET', body } = {}) {
   const headers = {
     'x-api-key': state.apiKey
   };
+
   if (body) {
     headers['content-type'] = 'application/json';
   }
@@ -73,8 +122,152 @@ function request(path, { method = 'GET', body } = {}) {
   });
 }
 
+function clamp01(value) {
+  return Math.max(0, Math.min(1, Number(value || 0)));
+}
+
+function toFixedSafe(value, digits = 2) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    return '-';
+  }
+  return n.toFixed(digits);
+}
+
+function pushHistoryPoint(data) {
+  const point = {
+    ts: data.generated_at || new Date().toISOString(),
+    load: data.metrics && Number.isFinite(Number(data.metrics.load_per_cpu_1m))
+      ? Number(data.metrics.load_per_cpu_1m)
+      : 0,
+    heap: data.metrics && Number.isFinite(Number(data.metrics.heap_usage_ratio))
+      ? Number(data.metrics.heap_usage_ratio)
+      : 0,
+    active: data.metrics && Number.isFinite(Number(data.metrics.active_calls))
+      ? Number(data.metrics.active_calls)
+      : 0
+  };
+
+  state.history.push(point);
+  if (state.history.length > MAX_HISTORY_POINTS) {
+    state.history.splice(0, state.history.length - MAX_HISTORY_POINTS);
+  }
+}
+
+function buildPolylinePoints(values, normalizeFn) {
+  if (!values.length) {
+    return '';
+  }
+
+  const w = 760;
+  const h = 220;
+  const left = 20;
+  const right = 740;
+  const top = 20;
+  const bottom = 200;
+  const spanX = right - left;
+  const spanY = bottom - top;
+
+  if (values.length === 1) {
+    const y = top + (1 - clamp01(normalizeFn(values[0], 0))) * spanY;
+    return `${left},${y.toFixed(2)} ${right},${y.toFixed(2)}`;
+  }
+
+  return values
+    .map((value, idx) => {
+      const x = left + (idx / (values.length - 1)) * spanX;
+      const y = top + (1 - clamp01(normalizeFn(value, idx))) * spanY;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(' ');
+}
+
+function renderLoadChart() {
+  const points = state.history;
+  if (points.length === 0) {
+    els.lineLoad.setAttribute('points', '');
+    els.lineHeap.setAttribute('points', '');
+    els.lineCalls.setAttribute('points', '');
+    els.chartMeta.textContent = '0 samples';
+    els.legendLoad.textContent = '-';
+    els.legendHeap.textContent = '-';
+    els.legendCalls.textContent = '-';
+    return;
+  }
+
+  const latest = points[points.length - 1];
+  const loadErrorThreshold = state.overview && state.overview.thresholds && state.overview.thresholds.load_per_cpu_1m
+    ? Number(state.overview.thresholds.load_per_cpu_1m.error || 1.2)
+    : 1.2;
+  const activeErrorThreshold = state.overview && state.overview.thresholds && state.overview.thresholds.active_calls
+    ? Number(state.overview.thresholds.active_calls.error || 50)
+    : 50;
+
+  const loadMax = Math.max(1.4, loadErrorThreshold * 1.25);
+  const activeMax = Math.max(10, activeErrorThreshold * 1.25, ...points.map((p) => p.active));
+
+  els.lineLoad.setAttribute(
+    'points',
+    buildPolylinePoints(points, (value) => value.load / loadMax)
+  );
+  els.lineHeap.setAttribute(
+    'points',
+    buildPolylinePoints(points, (value) => value.heap)
+  );
+  els.lineCalls.setAttribute(
+    'points',
+    buildPolylinePoints(points, (value) => value.active / activeMax)
+  );
+
+  els.chartMeta.textContent = `${points.length} samples / 10min window`;
+  els.legendLoad.textContent = toFixedSafe(latest.load, 3);
+  els.legendHeap.textContent = formatPercent(latest.heap, 1);
+  els.legendCalls.textContent = String(Math.round(latest.active));
+}
+
+function renderAlerts(alerts) {
+  const list = Array.isArray(alerts) ? alerts : [];
+  els.alertsList.innerHTML = '';
+  els.alertsCount.textContent = `${list.length} active`;
+
+  if (list.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = '暂无告警，系统状态正常。';
+    els.alertsList.appendChild(empty);
+    return;
+  }
+
+  list.forEach((alert) => {
+    const node = document.createElement('article');
+    node.className = `alert-item ${alert.level === 'error' ? 'error' : 'warning'}`;
+
+    const title = document.createElement('strong');
+    title.textContent = alert.metric || alert.id || 'alert';
+
+    const meta = document.createElement('p');
+    meta.textContent = alert.message || '-';
+
+    node.append(title, meta);
+    els.alertsList.appendChild(node);
+  });
+}
+
 function renderOverview(data) {
   state.overview = data;
+  pushHistoryPoint(data);
+
+  if (Array.isArray(data.capabilities && data.capabilities.log_services) && data.capabilities.log_services.length > 0) {
+    state.availableLogServices = [...data.capabilities.log_services];
+
+    const validSelections = state.selectedLogServices.filter((svc) => state.availableLogServices.includes(svc));
+    state.selectedLogServices = validSelections.length > 0
+      ? validSelections
+      : [...state.availableLogServices];
+
+    renderLogServiceFilters();
+  }
+
   els.hostValue.textContent = data.host || '-';
   els.uptimeValue.textContent = formatUptime(data.uptime_sec);
   els.dbValue.textContent = data.health && data.health.db === 'ok' ? 'OK' : 'ERROR';
@@ -83,9 +276,13 @@ function renderOverview(data) {
     ? `${data.health.ami.connected ? 'connected' : 'disconnected'} / ${data.health.ami.authenticated ? 'auth' : 'no-auth'}`
     : '-';
   els.amiValue.textContent = ami;
+
   els.rssValue.textContent = `RSS ${data.memory ? data.memory.rss_mb : '-'} MB`;
   els.heapValue.textContent = `Heap ${data.memory ? data.memory.heap_used_mb : '-'} / ${data.memory ? data.memory.heap_total_mb : '-'} MB`;
+  els.loadValue.textContent = `Load(1m/Core) ${data.metrics ? toFixedSafe(data.metrics.load_per_cpu_1m, 3) : '-'}`;
 
+  renderAlerts(data.alerts || []);
+  renderLoadChart();
   renderServices(data.services || [], data.capabilities || {});
   renderStats(data.database || {});
   renderRecentCalls(data.recent_calls || []);
@@ -106,6 +303,7 @@ function renderServices(services, capabilities) {
     const title = document.createElement('h3');
     title.className = 'service-title';
     title.textContent = svc.id || 'unknown';
+
     const meta = document.createElement('p');
     meta.className = 'service-meta';
     meta.textContent = `${svc.load_state} / ${svc.unit_file_state}`;
@@ -150,6 +348,7 @@ function renderStats(database) {
   const calls = database.calls || {};
   const users = database.users || {};
   const virtuals = database.virtual_numbers || {};
+
   const items = [
     ['总通话', calls.total],
     ['活跃通话', calls.active],
@@ -163,10 +362,13 @@ function renderStats(database) {
   items.forEach(([label, value]) => {
     const node = document.createElement('article');
     node.className = 'stat-pill';
+
     const l = document.createElement('span');
     l.textContent = label;
+
     const v = document.createElement('strong');
     v.textContent = value ?? 0;
+
     node.append(l, v);
     els.statsGrid.appendChild(node);
   });
@@ -204,26 +406,257 @@ function renderRecentCalls(calls) {
   });
 }
 
-async function refreshOverview() {
-  if (state.refreshing) {
+function createFilterChip(text, active, onClick) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `chip ${active ? 'active' : ''}`;
+  btn.textContent = text;
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
+function renderLogServiceFilters() {
+  els.logsServiceFilters.innerHTML = '';
+  state.availableLogServices.forEach((service) => {
+    const active = state.selectedLogServices.includes(service);
+    els.logsServiceFilters.appendChild(
+      createFilterChip(service, active, () => toggleLogService(service))
+    );
+  });
+}
+
+function renderLogLevelFilters() {
+  els.logsLevelFilters.innerHTML = '';
+  ['debug', 'info', 'warning', 'error'].forEach((level) => {
+    const active = state.selectedLogLevels.includes(level);
+    els.logsLevelFilters.appendChild(
+      createFilterChip(level, active, () => toggleLogLevel(level))
+    );
+  });
+}
+
+function ensureAtLeastOneSelected(current, fallbackList) {
+  if (current.length > 0) {
+    return current;
+  }
+  return [fallbackList[0]];
+}
+
+function toggleLogService(service) {
+  const exists = state.selectedLogServices.includes(service);
+  const next = exists
+    ? state.selectedLogServices.filter((item) => item !== service)
+    : [...state.selectedLogServices, service];
+
+  state.selectedLogServices = ensureAtLeastOneSelected(next, state.availableLogServices);
+  renderLogServiceFilters();
+  refreshLogs({ manual: true });
+  postAuditEvent('logs_filters_updated', 'dashboard.logs.services', {
+    services: state.selectedLogServices
+  });
+}
+
+function toggleLogLevel(level) {
+  const exists = state.selectedLogLevels.includes(level);
+  const next = exists
+    ? state.selectedLogLevels.filter((item) => item !== level)
+    : [...state.selectedLogLevels, level];
+
+  state.selectedLogLevels = ensureAtLeastOneSelected(next, ['debug', 'info', 'warning', 'error']);
+  renderLogLevelFilters();
+  refreshLogs({ manual: true });
+  postAuditEvent('logs_filters_updated', 'dashboard.logs.levels', {
+    levels: state.selectedLogLevels
+  });
+}
+
+function getFilteredLogsByKeyword() {
+  const keyword = String(state.logsKeyword || '').trim().toLowerCase();
+  if (!keyword) {
+    return state.logs;
+  }
+
+  return state.logs.filter((entry) => {
+    const haystack = `${entry.message || ''} ${entry.service || ''} ${entry.level || ''}`.toLowerCase();
+    return haystack.includes(keyword);
+  });
+}
+
+function renderLogs() {
+  const list = getFilteredLogsByKeyword();
+  els.logsBody.innerHTML = '';
+
+  if (list.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 4;
+    cell.textContent = '暂无日志记录';
+    row.appendChild(cell);
+    els.logsBody.appendChild(row);
+  } else {
+    list.forEach((entry) => {
+      const row = document.createElement('tr');
+      row.className = `log-row ${entry.level || 'info'}`;
+
+      const ts = document.createElement('td');
+      ts.textContent = formatTimestamp(entry.timestamp);
+
+      const svc = document.createElement('td');
+      svc.textContent = entry.service || '-';
+
+      const lvl = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = `log-level ${entry.level || 'info'}`;
+      badge.textContent = entry.level || 'info';
+      lvl.appendChild(badge);
+
+      const msg = document.createElement('td');
+      msg.className = 'log-message';
+      msg.textContent = entry.message || '';
+
+      row.append(ts, svc, lvl, msg);
+      els.logsBody.appendChild(row);
+    });
+  }
+
+  els.logsWarnings.innerHTML = '';
+  if (Array.isArray(state.logsWarnings) && state.logsWarnings.length > 0) {
+    state.logsWarnings.forEach((warn) => {
+      const node = document.createElement('p');
+      node.textContent = `${warn.service}: ${warn.message}`;
+      els.logsWarnings.appendChild(node);
+    });
+  }
+
+  const selected = `${state.selectedLogServices.length} services / ${state.selectedLogLevels.length} levels`;
+  const sinceSec = state.logsQuery && state.logsQuery.since_sec ? state.logsQuery.since_sec : '-';
+  els.logsMeta.textContent = `${list.length} entries (${selected}, since ${sinceSec}s)`;
+}
+
+function safeDetailsPreview(details) {
+  if (!details) {
+    return '-';
+  }
+  const text = JSON.stringify(details);
+  return text.length > 140 ? `${text.slice(0, 140)}...` : text;
+}
+
+function renderAuditEvents() {
+  els.auditList.innerHTML = '';
+
+  if (!state.auditEvents.length) {
+    const item = document.createElement('li');
+    item.className = 'audit-item';
+    item.textContent = '暂无审计记录';
+    els.auditList.appendChild(item);
     return;
   }
 
-  state.refreshing = true;
+  state.auditEvents.forEach((event) => {
+    const item = document.createElement('li');
+    item.className = 'audit-item';
+
+    const head = document.createElement('div');
+    head.className = 'audit-head';
+
+    const action = document.createElement('strong');
+    action.textContent = `${event.action} @ ${event.target}`;
+
+    const status = document.createElement('span');
+    status.className = `badge ${event.result === 'failed' ? 'err' : event.result === 'success' ? 'ok' : 'warn'}`;
+    status.textContent = event.result;
+
+    head.append(action, status);
+
+    const meta = document.createElement('p');
+    meta.className = 'audit-meta';
+    meta.textContent = `${formatTimestamp(event.created_at)} | actor=${event.actor} | ${safeDetailsPreview(event.details)}`;
+
+    item.append(head, meta);
+    els.auditList.appendChild(item);
+  });
+}
+
+function buildLogsPath() {
+  const params = new URLSearchParams();
+  params.set('services', state.selectedLogServices.join(','));
+  params.set('levels', state.selectedLogLevels.join(','));
+  params.set('since_sec', '600');
+  params.set('limit', '300');
+  return `/v1/ops/logs?${params.toString()}`;
+}
+
+async function refreshOverview() {
+  const data = await request('/v1/ops/overview');
+  renderOverview(data);
+  els.statusText.textContent = `已同步：${new Date().toLocaleTimeString()}`;
+  setBadge(els.connectionBadge, '在线', 'ok');
+}
+
+async function refreshLogs({ manual = false } = {}) {
+  if (!state.logsTailEnabled && !manual) {
+    return;
+  }
+
+  const data = await request(buildLogsPath());
+  state.logs = Array.isArray(data.entries) ? data.entries : [];
+  state.logsWarnings = Array.isArray(data.warnings) ? data.warnings : [];
+  state.logsQuery = data.query || null;
+  renderLogs();
+
+  if (manual) {
+    showToast(`日志已刷新 (${state.logs.length} 条)`);
+    postAuditEvent('logs_manual_refresh', 'dashboard.logs', {
+      entries: state.logs.length,
+      services: state.selectedLogServices,
+      levels: state.selectedLogLevels
+    });
+  }
+}
+
+async function refreshAuditEvents() {
+  const payload = await request('/v1/ops/audit-events?limit=40');
+  state.auditEvents = Array.isArray(payload.events) ? payload.events : [];
+  renderAuditEvents();
+}
+
+async function runRefreshCycle({ manual = false } = {}) {
+  if (state.pollInFlight || !state.apiKey) {
+    return;
+  }
+
+  state.pollInFlight = true;
   els.refreshBtn.disabled = true;
-  els.statusText.textContent = '同步中...';
+  if (manual) {
+    els.statusText.textContent = '同步中...';
+  }
 
   try {
-    const data = await request('/v1/ops/overview');
-    renderOverview(data);
-    els.statusText.textContent = `已同步：${new Date().toLocaleTimeString()}`;
-    setBadge(els.connectionBadge, '在线', 'ok');
+    await refreshOverview();
+    await refreshLogs({ manual: false });
+    await refreshAuditEvents();
   } catch (error) {
-    els.statusText.textContent = error.message;
     setBadge(els.connectionBadge, '连接失败', 'err');
+    els.statusText.textContent = error.message;
   } finally {
-    state.refreshing = false;
+    state.pollInFlight = false;
     els.refreshBtn.disabled = false;
+  }
+}
+
+async function postAuditEvent(action, target, details, result = 'success') {
+  try {
+    await request('/v1/ops/audit-events', {
+      method: 'POST',
+      body: {
+        action,
+        target,
+        result,
+        details
+      }
+    });
+  } catch (error) {
+    // do not disrupt dashboard behavior when audit write fails
   }
 }
 
@@ -237,7 +670,7 @@ async function handleServiceAction(serviceName, action) {
       method: 'POST'
     });
     showToast(`${payload.service.id} 已执行 ${action}`);
-    await refreshOverview();
+    await runRefreshCycle({ manual: true });
   } catch (error) {
     showToast(`操作失败: ${error.message}`);
   } finally {
@@ -246,34 +679,120 @@ async function handleServiceAction(serviceName, action) {
   }
 }
 
+function updateTailButton() {
+  if (state.logsTailEnabled) {
+    els.logsTailBtn.textContent = '暂停追尾';
+    els.logsTailBtn.classList.remove('filled');
+    els.logsTailBtn.classList.add('outline');
+  } else {
+    els.logsTailBtn.textContent = '恢复追尾';
+    els.logsTailBtn.classList.remove('outline');
+    els.logsTailBtn.classList.add('filled');
+  }
+}
+
+function exportLogsToJson() {
+  const entries = getFilteredLogsByKeyword();
+  const payload = {
+    exported_at: new Date().toISOString(),
+    query: {
+      services: state.selectedLogServices,
+      levels: state.selectedLogLevels,
+      keyword: state.logsKeyword,
+      tail: state.logsTailEnabled
+    },
+    entries
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `ops-logs-${Date.now()}.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+
+  showToast(`已导出 ${entries.length} 条日志`);
+  postAuditEvent('logs_export_json', 'dashboard.logs', {
+    entries: entries.length,
+    keyword: state.logsKeyword
+  });
+}
+
+async function manualRefreshLogs() {
+  try {
+    await refreshLogs({ manual: true });
+    await refreshAuditEvents();
+  } catch (error) {
+    showToast(`日志刷新失败: ${error.message}`);
+  }
+}
+
 function startAutoRefresh() {
   if (state.timer) {
     window.clearInterval(state.timer);
   }
+
   state.timer = window.setInterval(() => {
     if (document.visibilityState === 'visible') {
-      refreshOverview();
+      runRefreshCycle({ manual: false });
     }
-  }, 15000);
+  }, POLL_INTERVAL_MS);
 }
 
 function init() {
   state.apiKey = window.localStorage.getItem('privacy_calling_api_key') || '';
   els.apiKeyInput.value = state.apiKey;
 
+  renderLogServiceFilters();
+  renderLogLevelFilters();
+  updateTailButton();
+  renderLogs();
+  renderLoadChart();
+  renderAuditEvents();
+
   els.apiKeyForm.addEventListener('submit', (event) => {
     event.preventDefault();
     const nextKey = els.apiKeyInput.value.trim();
     state.apiKey = nextKey;
     window.localStorage.setItem('privacy_calling_api_key', nextKey);
-    refreshOverview();
+    runRefreshCycle({ manual: true });
   });
 
-  els.refreshBtn.addEventListener('click', refreshOverview);
+  els.refreshBtn.addEventListener('click', () => runRefreshCycle({ manual: true }));
+
+  els.logsKeywordInput.addEventListener('input', () => {
+    state.logsKeyword = els.logsKeywordInput.value.trim();
+    renderLogs();
+  });
+
+  els.logsTailBtn.addEventListener('click', async () => {
+    state.logsTailEnabled = !state.logsTailEnabled;
+    updateTailButton();
+
+    if (state.logsTailEnabled) {
+      await postAuditEvent('logs_tail_resumed', 'dashboard.logs', {
+        services: state.selectedLogServices,
+        levels: state.selectedLogLevels
+      });
+      manualRefreshLogs();
+    } else {
+      await postAuditEvent('logs_tail_paused', 'dashboard.logs', {
+        services: state.selectedLogServices,
+        levels: state.selectedLogLevels
+      });
+    }
+  });
+
+  els.logsManualBtn.addEventListener('click', manualRefreshLogs);
+  els.logsExportBtn.addEventListener('click', exportLogsToJson);
+
   startAutoRefresh();
 
   if (state.apiKey) {
-    refreshOverview();
+    runRefreshCycle({ manual: true });
   } else {
     setBadge(els.connectionBadge, '待鉴权', 'warn');
     els.statusText.textContent = '请先输入 API Key。';

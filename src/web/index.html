@@ -17,7 +17,7 @@
     <header class="top-bar animate-in">
       <div>
         <p class="overline">Privacy Calling</p>
-        <h1>服务运维面板</h1>
+        <h1>服务运维面板 V2</h1>
       </div>
       <div class="toolbar">
         <button id="refreshBtn" class="btn tonal" type="button">刷新</button>
@@ -26,9 +26,9 @@
     </header>
 
     <main class="layout">
-      <section class="card auth-card animate-in" style="--delay: 40ms">
+      <section class="card auth-card animate-in" style="--delay: 30ms">
         <h2>API Key</h2>
-        <p class="muted">页面操作会调用受保护的 `/v1/ops/*` 接口，请先输入与你服务端一致的 `x-api-key`。</p>
+        <p class="muted">页面会调用受保护的 `/v1/ops/*` 接口，请先输入与你服务端一致的 `x-api-key`。</p>
         <form id="apiKeyForm" class="auth-form">
           <input id="apiKeyInput" type="password" placeholder="输入 API Key" autocomplete="off" />
           <button class="btn filled" type="submit">保存并连接</button>
@@ -36,7 +36,7 @@
         <p id="statusText" class="status-text">等待连接...</p>
       </section>
 
-      <section class="card summary-card animate-in" style="--delay: 90ms">
+      <section class="card summary-card animate-in" style="--delay: 70ms">
         <h2>系统概览</h2>
         <div id="overviewGrid" class="overview-grid">
           <article>
@@ -59,10 +59,47 @@
         <div class="memory-strip">
           <span id="rssValue">RSS -</span>
           <span id="heapValue">Heap -</span>
+          <span id="loadValue">Load(1m) -</span>
         </div>
       </section>
 
-      <section class="card services-card animate-in" style="--delay: 130ms">
+      <section class="card alerts-card animate-in" style="--delay: 95ms">
+        <div class="section-head">
+          <h2>告警中心</h2>
+          <span id="alertsCount" class="muted">0 active</span>
+        </div>
+        <div id="alertsList" class="alerts-list"></div>
+      </section>
+
+      <section class="card load-card animate-in" style="--delay: 120ms">
+        <div class="section-head">
+          <h2>服务器负载曲线（10 分钟）</h2>
+          <span id="chartMeta" class="muted">0 samples</span>
+        </div>
+
+        <div class="chart-wrap">
+          <svg id="loadChart" viewBox="0 0 760 220" preserveAspectRatio="none" aria-label="server load chart">
+            <g class="chart-grid">
+              <line x1="20" y1="20" x2="740" y2="20"></line>
+              <line x1="20" y1="70" x2="740" y2="70"></line>
+              <line x1="20" y1="120" x2="740" y2="120"></line>
+              <line x1="20" y1="170" x2="740" y2="170"></line>
+              <line x1="20" y1="200" x2="740" y2="200"></line>
+            </g>
+            <polyline id="lineLoad" class="chart-line load" points=""></polyline>
+            <polyline id="lineHeap" class="chart-line heap" points=""></polyline>
+            <polyline id="lineCalls" class="chart-line calls" points=""></polyline>
+          </svg>
+        </div>
+
+        <div class="chart-legend">
+          <span><i class="dot load"></i> Load/Core(1m): <strong id="legendLoad">-</strong></span>
+          <span><i class="dot heap"></i> Heap 使用率: <strong id="legendHeap">-</strong></span>
+          <span><i class="dot calls"></i> 活跃通话: <strong id="legendCalls">-</strong></span>
+        </div>
+      </section>
+
+      <section class="card services-card animate-in" style="--delay: 145ms">
         <div class="section-head">
           <h2>服务状态与快捷操作</h2>
           <span class="muted">受管服务：Asterisk + API</span>
@@ -70,12 +107,60 @@
         <div id="servicesGrid" class="services-grid"></div>
       </section>
 
-      <section class="card stats-card animate-in" style="--delay: 170ms">
+      <section class="card logs-card animate-in" style="--delay: 170ms">
+        <div class="section-head">
+          <h2>分级日志（API + Asterisk + Asterisk full）</h2>
+          <span id="logsMeta" class="muted">等待日志...</span>
+        </div>
+
+        <div class="logs-controls">
+          <div>
+            <p class="control-label">服务</p>
+            <div id="logsServiceFilters" class="chip-row"></div>
+          </div>
+          <div>
+            <p class="control-label">级别</p>
+            <div id="logsLevelFilters" class="chip-row"></div>
+          </div>
+          <div class="logs-tools">
+            <input id="logsKeywordInput" type="text" placeholder="关键词过滤（前端）" autocomplete="off" />
+            <button id="logsTailBtn" class="btn outline" type="button">暂停追尾</button>
+            <button id="logsManualBtn" class="btn tonal" type="button">手动刷新</button>
+            <button id="logsExportBtn" class="btn filled" type="button">导出 JSON</button>
+          </div>
+        </div>
+
+        <div id="logsWarnings" class="logs-warnings"></div>
+
+        <div class="table-wrap logs-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>服务</th>
+                <th>级别</th>
+                <th>消息</th>
+              </tr>
+            </thead>
+            <tbody id="logsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card audit-card animate-in" style="--delay: 195ms">
+        <div class="section-head">
+          <h2>操作审计</h2>
+          <span class="muted">持久化到 SQLite</span>
+        </div>
+        <ul id="auditList" class="audit-list"></ul>
+      </section>
+
+      <section class="card stats-card animate-in" style="--delay: 220ms">
         <h2>通话统计</h2>
         <div id="statsGrid" class="stats-grid"></div>
       </section>
 
-      <section class="card calls-card animate-in" style="--delay: 210ms">
+      <section class="card calls-card animate-in" style="--delay: 245ms">
         <h2>最近通话</h2>
         <div class="table-wrap">
           <table>
@@ -99,4 +184,4 @@
 
     <script src="/dashboard/app.js" defer></script>
   </body>
-  </html>
+</html>

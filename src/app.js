@@ -3,7 +3,16 @@ const path = require('node:path');
 const os = require('node:os');
 const { engsetBlockingProbability } = require('./capacity/engset');
 const { privacyExhaustionProbability } = require('./capacity/privacy');
+const { buildOpsMetricsAndAlerts } = require('./services/ops-metrics');
 const { AppError } = require('./utils/errors');
+
+const AUDIT_ACTION_ALLOW_LIST = new Set([
+  'logs_tail_paused',
+  'logs_tail_resumed',
+  'logs_export_json',
+  'logs_manual_refresh',
+  'logs_filters_updated'
+]);
 
 function parseNumber(name, value) {
   const parsed = Number(value);
@@ -17,7 +26,33 @@ function toMb(bytes) {
   return Math.round((bytes / (1024 * 1024)) * 100) / 100;
 }
 
-function createApp({ authProvider, callService, db, amiClient, opsManager, config }) {
+function parseLimit(value, fallback = 30, max = 200) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(1, Math.min(max, parsed));
+}
+
+function getPrincipalId(req) {
+  return req && req.principal && req.principal.id ? req.principal.id : 'unknown';
+}
+
+function ensureOpsEnabled({ opsManager, config }) {
+  if (!opsManager || !(config && config.ops && config.ops.dashboardEnabled)) {
+    throw new AppError('Dashboard operations are disabled', 404, 'dashboard_disabled');
+  }
+}
+
+function maybeWriteAudit(db, payload) {
+  if (!db || typeof db.addOpsAuditEvent !== 'function') {
+    return;
+  }
+
+  db.addOpsAuditEvent(payload);
+}
+
+function createApp({ authProvider, callService, db, amiClient, opsManager, opsLogService, config }) {
   const app = express();
   app.use(express.json());
   app.use('/dashboard', express.static(path.join(__dirname, 'web'), { index: 'index.html' }));
@@ -48,9 +83,7 @@ function createApp({ authProvider, callService, db, amiClient, opsManager, confi
 
   app.get('/v1/ops/overview', async (req, res, next) => {
     try {
-      if (!opsManager || !(config && config.ops && config.ops.dashboardEnabled)) {
-        throw new AppError('Dashboard operations are disabled', 404, 'dashboard_disabled');
-      }
+      ensureOpsEnabled({ opsManager, config });
 
       const [services] = await Promise.all([
         opsManager.getServicesStatus()
@@ -61,6 +94,15 @@ function createApp({ authProvider, callService, db, amiClient, opsManager, confi
       const summary = db.getDashboardSummary();
       const recentCalls = db.getRecentCalls(10);
       const mem = process.memoryUsage();
+      const metricsBundle = buildOpsMetricsAndAlerts({
+        summary,
+        memoryUsage: mem,
+        loadavg: os.loadavg(),
+        cpuCount: os.cpus().length,
+        totalMem: os.totalmem(),
+        freeMem: os.freemem(),
+        thresholds: config && config.ops ? config.ops.alerts : null
+      });
 
       res.json({
         status: 'ok',
@@ -80,10 +122,96 @@ function createApp({ authProvider, callService, db, amiClient, opsManager, confi
         services,
         database: summary,
         recent_calls: recentCalls,
+        system: metricsBundle.system,
+        metrics: metricsBundle.metrics,
+        thresholds: metricsBundle.thresholds,
+        alerts: metricsBundle.alerts,
         capabilities: {
           allow_service_control: Boolean(config.ops.allowServiceControl),
-          managed_services: opsManager.listManagedServices()
+          managed_services: opsManager.listManagedServices(),
+          log_services: opsLogService ? opsLogService.listManagedServices() : []
         }
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/v1/ops/logs', async (req, res, next) => {
+    try {
+      ensureOpsEnabled({ opsManager, config });
+      if (!opsLogService) {
+        throw new AppError('Ops log service is unavailable', 503, 'ops_log_service_unavailable');
+      }
+
+      const payload = await opsLogService.getLogs({
+        services: req.query.services,
+        levels: req.query.levels,
+        sinceSec: req.query.since_sec,
+        limit: req.query.limit
+      });
+
+      res.json(payload);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/v1/ops/audit-events', (req, res, next) => {
+    try {
+      ensureOpsEnabled({ opsManager, config });
+      if (!db || typeof db.listOpsAuditEvents !== 'function') {
+        throw new AppError('Audit store is unavailable', 503, 'audit_store_unavailable');
+      }
+
+      const limit = parseLimit(req.query.limit, 30, 200);
+      res.json({
+        events: db.listOpsAuditEvents(limit),
+        limit
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/v1/ops/audit-events', (req, res, next) => {
+    try {
+      ensureOpsEnabled({ opsManager, config });
+      if (!db || typeof db.addOpsAuditEvent !== 'function') {
+        throw new AppError('Audit store is unavailable', 503, 'audit_store_unavailable');
+      }
+
+      const action = req.body && typeof req.body.action === 'string'
+        ? req.body.action.trim()
+        : '';
+      if (!AUDIT_ACTION_ALLOW_LIST.has(action)) {
+        throw new AppError('Unsupported audit action', 400, 'unsupported_audit_action');
+      }
+
+      const target = req.body && typeof req.body.target === 'string' && req.body.target.trim()
+        ? req.body.target.trim()
+        : 'dashboard';
+      const resultRaw = req.body && typeof req.body.result === 'string'
+        ? req.body.result.trim().toLowerCase()
+        : 'success';
+      const result = ['success', 'failed', 'info'].includes(resultRaw)
+        ? resultRaw
+        : 'info';
+
+      const details = req.body && req.body.details && typeof req.body.details === 'object'
+        ? req.body.details
+        : null;
+
+      maybeWriteAudit(db, {
+        actor: getPrincipalId(req),
+        action,
+        target,
+        result,
+        details
+      });
+
+      res.status(201).json({
+        status: 'ok'
       });
     } catch (error) {
       next(error);
@@ -92,9 +220,7 @@ function createApp({ authProvider, callService, db, amiClient, opsManager, confi
 
   app.get('/v1/ops/services', async (req, res, next) => {
     try {
-      if (!opsManager || !(config && config.ops && config.ops.dashboardEnabled)) {
-        throw new AppError('Dashboard operations are disabled', 404, 'dashboard_disabled');
-      }
+      ensureOpsEnabled({ opsManager, config });
 
       const services = await opsManager.getServicesStatus();
       res.json({
@@ -107,15 +233,46 @@ function createApp({ authProvider, callService, db, amiClient, opsManager, confi
 
   app.post('/v1/ops/services/:service/:action', async (req, res, next) => {
     try {
-      if (!opsManager || !(config && config.ops && config.ops.dashboardEnabled)) {
-        throw new AppError('Dashboard operations are disabled', 404, 'dashboard_disabled');
-      }
+      ensureOpsEnabled({ opsManager, config });
 
-      const serviceStatus = await opsManager.controlService(req.params.service, req.params.action);
-      res.json({
-        status: 'ok',
-        service: serviceStatus
-      });
+      const actor = getPrincipalId(req);
+      const actionName = String(req.params.action || '').trim();
+      const serviceName = String(req.params.service || '').trim();
+
+      try {
+        const serviceStatus = await opsManager.controlService(serviceName, actionName);
+        maybeWriteAudit(db, {
+          actor,
+          action: `service_${actionName}`,
+          target: serviceName,
+          result: 'success',
+          details: {
+            active_state: serviceStatus.active_state,
+            sub_state: serviceStatus.sub_state
+          }
+        });
+
+        res.json({
+          status: 'ok',
+          service: serviceStatus
+        });
+      } catch (error) {
+        try {
+          maybeWriteAudit(db, {
+            actor,
+            action: `service_${actionName}`,
+            target: serviceName,
+            result: 'failed',
+            details: {
+              code: error.code || 'service_control_failed',
+              message: error.message
+            }
+          });
+        } catch (auditError) {
+          // ignore audit write errors to avoid shadowing the original error
+        }
+        throw error;
+      }
     } catch (error) {
       next(error);
     }
@@ -204,5 +361,6 @@ function createApp({ authProvider, callService, db, amiClient, opsManager, confi
 }
 
 module.exports = {
-  createApp
+  createApp,
+  AUDIT_ACTION_ALLOW_LIST
 };

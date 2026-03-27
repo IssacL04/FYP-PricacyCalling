@@ -140,6 +140,29 @@ class DatabaseService {
         FROM calls
         ORDER BY created_at DESC
         LIMIT ?
+      `),
+      insertOpsAuditEvent: this.db.prepare(`
+        INSERT INTO ops_audit_events (
+          actor,
+          action,
+          target,
+          result,
+          details,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ${nowExpr()})
+      `),
+      listOpsAuditEvents: this.db.prepare(`
+        SELECT
+          id,
+          actor,
+          action,
+          target,
+          result,
+          details,
+          created_at
+        FROM ops_audit_events
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
       `)
     };
   }
@@ -308,6 +331,45 @@ class DatabaseService {
       ended_at: row.ended_at,
       failure_reason: row.failure_reason
     }));
+  }
+
+  addOpsAuditEvent({ actor, action, target, result, details = null }) {
+    const serializedDetails = details === null || details === undefined
+      ? null
+      : JSON.stringify(details);
+
+    this.stmts.insertOpsAuditEvent.run(
+      String(actor || 'unknown'),
+      String(action || 'unknown_action'),
+      String(target || '-'),
+      String(result || 'unknown'),
+      serializedDetails
+    );
+  }
+
+  listOpsAuditEvents(limit = 30) {
+    const safeLimit = Math.max(1, Math.min(200, Number.parseInt(limit, 10) || 30));
+
+    return this.stmts.listOpsAuditEvents.all(safeLimit).map((row) => {
+      let parsedDetails = null;
+      if (row.details) {
+        try {
+          parsedDetails = JSON.parse(row.details);
+        } catch (error) {
+          parsedDetails = { raw: row.details };
+        }
+      }
+
+      return {
+        id: row.id,
+        actor: row.actor,
+        action: row.action,
+        target: row.target,
+        result: row.result,
+        details: parsedDetails,
+        created_at: row.created_at
+      };
+    });
   }
 }
 

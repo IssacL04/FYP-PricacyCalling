@@ -5,6 +5,11 @@ function toInt(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function toNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function toBool(value, fallback) {
   if (value === undefined || value === null || value === '') {
     return fallback;
@@ -67,7 +72,31 @@ function loadConfig() {
       commandTimeoutMs: toInt(process.env.OPS_COMMAND_TIMEOUT_MS, 8000),
       systemctlBin: process.env.OPS_SYSTEMCTL_BIN || 'systemctl',
       sudoBin: process.env.OPS_SUDO_BIN || 'sudo',
-      managedServices: toList(process.env.OPS_MANAGED_SERVICES, ['asterisk', 'privacy-calling-api'])
+      managedServices: toList(process.env.OPS_MANAGED_SERVICES, ['asterisk', 'privacy-calling-api']),
+      logs: {
+        defaultLimit: toInt(process.env.OPS_LOG_DEFAULT_LIMIT, 200),
+        maxLimit: toInt(process.env.OPS_LOG_MAX_LIMIT, 500),
+        defaultSinceSec: toInt(process.env.OPS_LOG_DEFAULT_SINCE_SEC, 600),
+        journalctlBin: process.env.OPS_JOURNALCTL_BIN || 'journalctl',
+        tailBin: process.env.OPS_LOG_TAIL_BIN || 'tail',
+        useSudo: toBool(process.env.OPS_LOG_USE_SUDO, false),
+        includeAsteriskFull: toBool(process.env.OPS_LOG_INCLUDE_ASTERISK_FULL, true),
+        asteriskFullPath: process.env.OPS_LOG_ASTERISK_FULL_PATH || '/var/log/asterisk/full'
+      },
+      alerts: {
+        loadPerCpu: {
+          warn: toNumber(process.env.OPS_ALERT_LOAD_PER_CPU_WARN, 0.8),
+          error: toNumber(process.env.OPS_ALERT_LOAD_PER_CPU_ERROR, 1.2)
+        },
+        heapUsage: {
+          warn: toNumber(process.env.OPS_ALERT_HEAP_USAGE_WARN, 0.75),
+          error: toNumber(process.env.OPS_ALERT_HEAP_USAGE_ERROR, 0.9)
+        },
+        activeCalls: {
+          warn: toInt(process.env.OPS_ALERT_ACTIVE_CALLS_WARN, 30),
+          error: toInt(process.env.OPS_ALERT_ACTIVE_CALLS_ERROR, 50)
+        }
+      }
     }
   };
 }

@@ -82,3 +82,16 @@ CREATE TABLE IF NOT EXISTS call_legs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_call_legs_call_id ON call_legs(call_id);
+
+CREATE TABLE IF NOT EXISTS ops_audit_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target TEXT NOT NULL,
+  result TEXT NOT NULL,
+  details TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ops_audit_events_created_at
+  ON ops_audit_events(created_at DESC);

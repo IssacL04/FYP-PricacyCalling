@@ -6,6 +6,7 @@ const { AmiClient } = require('./asterisk/ami-client');
 const { CallStateMachine } = require('./services/call-state-machine');
 const { CallService } = require('./services/call-service');
 const { SystemServiceManager } = require('./services/system-service-manager');
+const { OpsLogService } = require('./services/ops-log-service');
 const { createApp } = require('./app');
 
 async function main() {
@@ -60,12 +61,27 @@ async function main() {
     sudoBin: config.ops.sudoBin
   });
 
+  const opsLogService = new OpsLogService({
+    managedServices: config.ops.managedServices,
+    defaultLimit: config.ops.logs.defaultLimit,
+    maxLimit: config.ops.logs.maxLimit,
+    defaultSinceSec: config.ops.logs.defaultSinceSec,
+    commandTimeoutMs: config.ops.commandTimeoutMs,
+    journalctlBin: config.ops.logs.journalctlBin,
+    tailBin: config.ops.logs.tailBin,
+    sudoBin: config.ops.sudoBin,
+    useSudo: config.ops.logs.useSudo,
+    includeAsteriskFull: config.ops.logs.includeAsteriskFull,
+    asteriskFullPath: config.ops.logs.asteriskFullPath
+  });
+
   const app = createApp({
     authProvider,
     callService,
     db,
     amiClient,
     opsManager,
+    opsLogService,
     config
   });
   const server = app.listen(config.app.port, config.app.host, () => {
