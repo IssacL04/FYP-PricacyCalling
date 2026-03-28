@@ -4,6 +4,31 @@ function nowSql() {
   return new Date().toISOString();
 }
 
+function isNormalClearingReason(reason) {
+  const raw = String(reason || '').trim().toLowerCase();
+  return raw === '16' || raw === 'normal_clearing' || raw === 'normal clearing';
+}
+
+function computeTerminalStatus(current, reason) {
+  const aFailed = current.a_leg_status === 'failed';
+  const bFailed = current.b_leg_status === 'failed';
+  const anyFailed = aFailed || bFailed;
+  if (anyFailed) {
+    return 'failed';
+  }
+
+  const bridged = current.bridge_status === 'bridged' || current.b_leg_status === 'answered';
+  if (bridged) {
+    return 'completed';
+  }
+
+  if (isNormalClearingReason(reason)) {
+    return 'completed';
+  }
+
+  return 'failed';
+}
+
 class CallStateMachine {
   constructor(db) {
     this.db = db;
@@ -172,8 +197,10 @@ class CallStateMachine {
     }
 
     this.db.withTransaction(() => {
+      const successStates = new Set(['answered', 'answer', 'up', 'bridged', 'bridge']);
+
       if (leg === 'A') {
-        if (state === 'answered') {
+        if (successStates.has(state)) {
           this.db.updateLegStatus(callId, 'A', 'answered', channel);
           this.db.updateCallStatus({ id: callId, status: 'answered', bridgeStatus: 'pending' });
           return;
@@ -195,7 +222,7 @@ class CallStateMachine {
           this.db.updateCallStatus({ id: callId, status: 'ringing', bridgeStatus: 'pending' });
           return;
         }
-        if (state === 'answered') {
+        if (successStates.has(state)) {
           this.db.updateLegStatus(callId, 'B', 'answered', channel);
           this.db.updateCallStatus({
             id: callId,
@@ -242,8 +269,7 @@ class CallStateMachine {
           throw new AppError(`call ${callId} not found`, 404, 'call_not_found');
         }
 
-        const bridged = current.bridge_status === 'bridged' || current.b_leg_status === 'answered';
-        const finalStatus = current.status === 'failed' || !bridged ? 'failed' : 'completed';
+        const finalStatus = computeTerminalStatus(current, reason);
         const bridgeStatus = current.bridge_status === 'bridged' ? 'released' : 'pending';
 
         this.db.updateLegStatus(callId, 'A', current.a_leg_status === 'failed' ? 'failed' : 'hangup', channel, reason);
@@ -274,12 +300,13 @@ class CallStateMachine {
       return;
     }
 
-    const bridged = current.bridge_status === 'bridged' || current.b_leg_status === 'answered';
+    const reason = event.Cause || event.CauseTxt || event.Reason || 'hangup_before_bridge';
+    const finalStatus = computeTerminalStatus(current, reason);
     this.db.updateCallStatus({
       id: callId,
-      status: current.status === 'failed' || !bridged ? 'failed' : 'completed',
+      status: finalStatus,
       bridgeStatus: current.bridge_status === 'bridged' ? 'released' : 'pending',
-      failureReason: current.status === 'failed' || !bridged ? current.failure_reason || 'hangup_before_bridge' : null,
+      failureReason: finalStatus === 'failed' ? current.failure_reason || 'hangup_before_bridge' : null,
       endedAt: nowSql()
     });
   }
