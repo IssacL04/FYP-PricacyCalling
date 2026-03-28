@@ -116,6 +116,11 @@ body {
   gap: 10px;
 }
 
+.auth-actions {
+  display: flex;
+  gap: 8px;
+}
+
 input[type='password'],
 input[type='text'] {
   border: 1px solid var(--md-outline);
@@ -137,6 +142,34 @@ input[type='text']:focus {
   margin: 10px 0 0;
   color: var(--md-text-muted);
   font-size: 0.9rem;
+}
+
+.node-session {
+  margin-top: 10px;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--md-outline) 52%, transparent);
+  background: color-mix(in srgb, var(--md-surface-alt) 70%, #fff);
+  padding: 10px 12px;
+}
+
+.node-session-title {
+  margin: 0 0 8px;
+  font-size: 0.84rem;
+  color: var(--md-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.node-session-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
 }
 
 .overview-grid {
@@ -606,7 +639,16 @@ th {
     grid-template-columns: 1fr;
   }
 
+  .auth-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
   .logs-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .node-session-grid {
     grid-template-columns: 1fr;
   }
 

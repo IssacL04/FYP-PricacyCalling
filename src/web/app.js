@@ -3,6 +3,9 @@ const POLL_INTERVAL_MS = 2000;
 
 const state = {
   apiKey: '',
+  bearerToken: '',
+  authMode: 'none',
+  blockchainSession: null,
   pollInFlight: false,
   actionInFlight: new Set(),
   overview: null,
@@ -22,6 +25,13 @@ const state = {
 const els = {
   apiKeyForm: document.getElementById('apiKeyForm'),
   apiKeyInput: document.getElementById('apiKeyInput'),
+  demoLoginBtn: document.getElementById('demoLoginBtn'),
+  authModeText: document.getElementById('authModeText'),
+  nodeSessionPanel: document.getElementById('nodeSessionPanel'),
+  nodeAddressValue: document.getElementById('nodeAddressValue'),
+  nodeIdValue: document.getElementById('nodeIdValue'),
+  nodeMethodValue: document.getElementById('nodeMethodValue'),
+  nodeExpiresValue: document.getElementById('nodeExpiresValue'),
   statusText: document.getElementById('statusText'),
   refreshBtn: document.getElementById('refreshBtn'),
   connectionBadge: document.getElementById('connectionBadge'),
@@ -56,6 +66,95 @@ const els = {
   auditList: document.getElementById('auditList'),
   toast: document.getElementById('toast')
 };
+
+function hasApiKeyAuth() {
+  return Boolean(state.apiKey);
+}
+
+function hasBearerAuth() {
+  return Boolean(state.bearerToken);
+}
+
+function hasAnyAuth() {
+  return hasApiKeyAuth() || hasBearerAuth();
+}
+
+function setAuthMode(mode) {
+  state.authMode = mode;
+  window.localStorage.setItem('privacy_calling_auth_mode', mode);
+  if (els.authModeText) {
+    if (mode === 'demo_jwt') {
+      els.authModeText.textContent = '当前鉴权：Demo JWT（免钱包）';
+    } else if (mode === 'api_key') {
+      els.authModeText.textContent = '当前鉴权：API Key';
+    } else {
+      els.authModeText.textContent = '当前鉴权：未连接';
+    }
+  }
+  renderNodeSession();
+}
+
+function decodeBase64Url(input) {
+  const normalized = String(input || '')
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+  const pad = normalized.length % 4;
+  const padded = pad === 0 ? normalized : `${normalized}${'='.repeat(4 - pad)}`;
+  return atob(padded);
+}
+
+function tryDecodeJwtClaims(token) {
+  try {
+    const parts = String(token || '').split('.');
+    if (parts.length !== 3) {
+      return null;
+    }
+    const json = decodeBase64Url(parts[1]);
+    const claims = JSON.parse(json);
+    return claims && typeof claims === 'object' ? claims : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function setBlockchainSession(session) {
+  state.blockchainSession = session || null;
+  if (state.blockchainSession) {
+    window.localStorage.setItem(
+      'privacy_calling_blockchain_session',
+      JSON.stringify(state.blockchainSession)
+    );
+  } else {
+    window.localStorage.removeItem('privacy_calling_blockchain_session');
+  }
+  renderNodeSession();
+}
+
+function clearBlockchainSession() {
+  setBlockchainSession(null);
+}
+
+function renderNodeSession() {
+  if (!els.nodeSessionPanel) {
+    return;
+  }
+
+  const session = state.blockchainSession;
+  if (!session || !hasBearerAuth()) {
+    els.nodeSessionPanel.classList.remove('active');
+    els.nodeAddressValue.textContent = '-';
+    els.nodeIdValue.textContent = '-';
+    els.nodeMethodValue.textContent = state.authMode === 'api_key' ? 'api_key' : '-';
+    els.nodeExpiresValue.textContent = '-';
+    return;
+  }
+
+  els.nodeSessionPanel.classList.add('active');
+  els.nodeAddressValue.textContent = session.address || '-';
+  els.nodeIdValue.textContent = session.nodeId || '-';
+  els.nodeMethodValue.textContent = session.authMethod || '-';
+  els.nodeExpiresValue.textContent = session.expiresAt ? formatTimestamp(session.expiresAt) : '-';
+}
 
 function showToast(text) {
   els.toast.textContent = text;
@@ -95,22 +194,15 @@ function formatTimestamp(value) {
   return date.toLocaleString();
 }
 
-function request(path, { method = 'GET', body } = {}) {
-  if (!state.apiKey) {
-    return Promise.reject(new Error('请先填写 API Key'));
-  }
-
-  const headers = {
-    'x-api-key': state.apiKey
-  };
-
-  if (body) {
-    headers['content-type'] = 'application/json';
+function publicRequest(path, { method = 'GET', body, headers = {} } = {}) {
+  const requestHeaders = { ...headers };
+  if (body && !requestHeaders['content-type']) {
+    requestHeaders['content-type'] = 'application/json';
   }
 
   return fetch(path, {
     method,
-    headers,
+    headers: requestHeaders,
     body: body ? JSON.stringify(body) : undefined
   }).then(async (resp) => {
     const payload = await resp.json().catch(() => ({}));
@@ -120,6 +212,27 @@ function request(path, { method = 'GET', body } = {}) {
     }
     return payload;
   });
+}
+
+function request(path, { method = 'GET', body } = {}) {
+  if (!hasAnyAuth()) {
+    return Promise.reject(new Error('请先使用 API Key 或 Demo 登录'));
+  }
+
+  const headers = {};
+  if (state.authMode === 'demo_jwt' && hasBearerAuth()) {
+    headers.authorization = `Bearer ${state.bearerToken}`;
+  } else if (hasApiKeyAuth()) {
+    headers['x-api-key'] = state.apiKey;
+  } else if (hasBearerAuth()) {
+    headers.authorization = `Bearer ${state.bearerToken}`;
+  }
+
+  if (body) {
+    headers['content-type'] = 'application/json';
+  }
+
+  return publicRequest(path, { method, body, headers });
 }
 
 function clamp01(value) {
@@ -621,7 +734,7 @@ async function refreshAuditEvents() {
 }
 
 async function runRefreshCycle({ manual = false } = {}) {
-  if (state.pollInFlight || !state.apiKey) {
+  if (state.pollInFlight || !hasAnyAuth()) {
     return;
   }
 
@@ -730,6 +843,44 @@ async function manualRefreshLogs() {
   }
 }
 
+async function handleDemoLogin() {
+  els.demoLoginBtn.disabled = true;
+  els.statusText.textContent = 'Demo 登录中...';
+  try {
+    const payload = await publicRequest('/v1/auth/demo-login', {
+      method: 'POST',
+      body: {}
+    });
+
+    state.bearerToken = String(payload.access_token || '').trim();
+    if (!state.bearerToken) {
+      throw new Error('Demo 登录未返回 access_token');
+    }
+
+    window.localStorage.setItem('privacy_calling_bearer_token', state.bearerToken);
+    const expiresSec = Number(payload.expires_in_sec);
+    const now = Date.now();
+    setBlockchainSession({
+      address: payload.subject_address || '-',
+      nodeId: payload.node_id || '-',
+      authMethod: payload.auth_method || 'blockchain',
+      issuedAt: new Date(now).toISOString(),
+      expiresAt: Number.isFinite(expiresSec) ? new Date(now + expiresSec * 1000).toISOString() : null
+    });
+    setAuthMode('demo_jwt');
+    els.statusText.textContent = 'Demo JWT 已就绪，开始同步...';
+    setBadge(els.connectionBadge, 'Demo JWT', 'warn');
+    showToast('Demo 登录成功（免钱包）');
+    await runRefreshCycle({ manual: true });
+  } catch (error) {
+    els.statusText.textContent = `Demo 登录失败：${error.message}`;
+    setBadge(els.connectionBadge, '连接失败', 'err');
+    showToast(`Demo 登录失败: ${error.message}`);
+  } finally {
+    els.demoLoginBtn.disabled = false;
+  }
+}
+
 function startAutoRefresh() {
   if (state.timer) {
     window.clearInterval(state.timer);
@@ -744,7 +895,39 @@ function startAutoRefresh() {
 
 function init() {
   state.apiKey = window.localStorage.getItem('privacy_calling_api_key') || '';
+  state.bearerToken = window.localStorage.getItem('privacy_calling_bearer_token') || '';
+  const savedSession = window.localStorage.getItem('privacy_calling_blockchain_session');
+  if (savedSession) {
+    try {
+      state.blockchainSession = JSON.parse(savedSession);
+    } catch (error) {
+      state.blockchainSession = null;
+    }
+  }
   els.apiKeyInput.value = state.apiKey;
+
+  if (!state.blockchainSession && state.bearerToken) {
+    const claims = tryDecodeJwtClaims(state.bearerToken);
+    if (claims && claims.sub) {
+      state.blockchainSession = {
+        address: claims.sub,
+        nodeId: claims.node_id || '-',
+        authMethod: claims.auth_method || 'blockchain',
+        issuedAt: claims.iat ? new Date(Number(claims.iat) * 1000).toISOString() : null,
+        expiresAt: claims.exp ? new Date(Number(claims.exp) * 1000).toISOString() : null
+      };
+    }
+  }
+
+  const savedMode = window.localStorage.getItem('privacy_calling_auth_mode');
+  if (savedMode === 'demo_jwt' && state.bearerToken) {
+    setAuthMode('demo_jwt');
+  } else if (state.apiKey) {
+    setAuthMode('api_key');
+  } else {
+    setAuthMode('none');
+  }
+  renderNodeSession();
 
   renderLogServiceFilters();
   renderLogLevelFilters();
@@ -758,8 +941,20 @@ function init() {
     const nextKey = els.apiKeyInput.value.trim();
     state.apiKey = nextKey;
     window.localStorage.setItem('privacy_calling_api_key', nextKey);
+    state.bearerToken = '';
+    window.localStorage.removeItem('privacy_calling_bearer_token');
+    clearBlockchainSession();
+    if (state.apiKey) {
+      setAuthMode('api_key');
+    } else {
+      setAuthMode('none');
+    }
     runRefreshCycle({ manual: true });
   });
+
+  if (els.demoLoginBtn) {
+    els.demoLoginBtn.addEventListener('click', handleDemoLogin);
+  }
 
   els.refreshBtn.addEventListener('click', () => runRefreshCycle({ manual: true }));
 
@@ -791,11 +986,11 @@ function init() {
 
   startAutoRefresh();
 
-  if (state.apiKey) {
+  if (hasAnyAuth()) {
     runRefreshCycle({ manual: true });
   } else {
     setBadge(els.connectionBadge, '待鉴权', 'warn');
-    els.statusText.textContent = '请先输入 API Key。';
+    els.statusText.textContent = '请先输入 API Key 或点击 Demo 登录。';
   }
 }
 

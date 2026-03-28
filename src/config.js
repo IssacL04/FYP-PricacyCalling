@@ -45,6 +45,23 @@ function loadConfig() {
       host: process.env.APP_HOST || '0.0.0.0',
       apiKey: process.env.API_KEY || 'dev-privacy-key'
     },
+    auth: {
+      mode: String(process.env.AUTH_MODE || 'api_key').trim().toLowerCase(),
+      enableApiKeyFallback: toBool(process.env.AUTH_ENABLE_API_KEY_FALLBACK, true),
+      jwtSecret: process.env.AUTH_JWT_SECRET || `${process.env.API_KEY || 'dev-privacy-key'}-jwt`,
+      jwtExpiresSec: toInt(process.env.AUTH_JWT_EXPIRES_SEC, 300),
+      challengeTtlSec: toInt(process.env.AUTH_CHALLENGE_TTL_SEC, 60),
+      demoMode: toBool(process.env.AUTH_DEMO_MODE, false),
+      demoAddress: process.env.AUTH_DEMO_ADDRESS || '0x1111111111111111111111111111111111111111',
+      demoNodeId: process.env.AUTH_DEMO_NODE_ID || 'demo-node'
+    },
+    blockchain: {
+      rpcUrl: process.env.CHAIN_RPC_URL || 'http://127.0.0.1:8545',
+      chainId: toInt(process.env.CHAIN_ID, 31337),
+      allowlistContract: process.env.CHAIN_ALLOWLIST_CONTRACT || '',
+      allowlistMode: String(process.env.CHAIN_ALLOWLIST_MODE || 'static').trim().toLowerCase(),
+      allowedAddresses: toList(process.env.CHAIN_ALLOWED_ADDRESSES, [])
+    },
     db: {
       path: process.env.DB_PATH || path.join(process.cwd(), 'data', 'privacy.db')
     },

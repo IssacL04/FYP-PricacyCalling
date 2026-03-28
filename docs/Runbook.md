@@ -195,6 +195,71 @@ sudo systemctl status privacy-calling-api --no-pager
 
 如果不一致，会返回 401。
 
+### 3.4 区块链鉴权最小演示（可选）
+
+如果你要演示“节点钱包签名登录”，推荐先用 `hybrid` 模式，避免把现有 API Key 流程一次性切断。
+
+编辑：`/home/ubuntu/fyp/PrivacyCalling/deploy/env/privacy-calling.env`
+
+```env
+AUTH_MODE=hybrid
+AUTH_ENABLE_API_KEY_FALLBACK=true
+AUTH_JWT_SECRET=change-me-jwt-secret
+AUTH_JWT_EXPIRES_SEC=300
+AUTH_CHALLENGE_TTL_SEC=60
+AUTH_DEMO_MODE=true
+AUTH_DEMO_ADDRESS=0x1111111111111111111111111111111111111111
+AUTH_DEMO_NODE_ID=demo-node
+CHAIN_RPC_URL=http://127.0.0.1:8545
+CHAIN_ALLOWLIST_MODE=static
+CHAIN_ALLOWED_ADDRESSES=0x1111111111111111111111111111111111111111
+```
+
+重启服务：
+
+```bash
+sudo systemctl restart privacy-calling-api
+```
+
+获取 challenge：
+
+```bash
+curl 'http://127.0.0.1:8080/v1/auth/challenge?address=0x1111111111111111111111111111111111111111&node_id=node-a'
+```
+
+然后用钱包对返回 `message` 执行 `personal_sign`，拿到 `signature`，再提交：
+
+```bash
+curl -X POST 'http://127.0.0.1:8080/v1/auth/verify' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "address":"0x1111111111111111111111111111111111111111",
+    "node_id":"node-a",
+    "challenge_id":"<challenge_id>",
+    "signature":"<wallet_signature>"
+  }'
+```
+
+返回 `access_token` 后即可改用：
+
+```bash
+curl -H 'Authorization: Bearer <access_token>' \
+  'http://127.0.0.1:8080/v1/ops/overview'
+```
+
+如果你没有钱包，直接走免签名演示接口：
+
+```bash
+curl -X POST 'http://127.0.0.1:8080/v1/auth/demo-login' \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+说明：
+1. 该接口仅在 `AUTH_DEMO_MODE=true` 时开放
+2. 页面 `/dashboard` 已内置“Demo 登录（免钱包）”按钮
+3. 这是演示链路，不等价于真实链上签名鉴权
+
 ---
 
 ## 4. 软电话登录（MicroSIP / Sipnetic）

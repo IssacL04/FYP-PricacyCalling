@@ -52,7 +52,16 @@ function maybeWriteAudit(db, payload) {
   db.addOpsAuditEvent(payload);
 }
 
-function createApp({ authProvider, callService, db, amiClient, opsManager, opsLogService, config }) {
+function createApp({
+  authProvider,
+  blockchainAuthService,
+  callService,
+  db,
+  amiClient,
+  opsManager,
+  opsLogService,
+  config
+}) {
   const app = express();
   app.use(express.json());
   app.use('/dashboard', express.static(path.join(__dirname, 'web'), { index: 'index.html' }));
@@ -70,6 +79,81 @@ function createApp({ authProvider, callService, db, amiClient, opsManager, opsLo
 
   app.get('/', (req, res) => {
     res.redirect('/dashboard');
+  });
+
+  app.get('/v1/auth/challenge', (req, res, next) => {
+    try {
+      if (!blockchainAuthService) {
+        throw new AppError('Blockchain auth is disabled', 404, 'blockchain_auth_disabled');
+      }
+
+      const address = req.query && req.query.address ? String(req.query.address).trim() : '';
+      const nodeId = req.query && req.query.node_id ? String(req.query.node_id).trim() : '';
+      const payload = blockchainAuthService.createChallenge({
+        address,
+        nodeId
+      });
+
+      res.json({
+        status: 'ok',
+        ...payload
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/v1/auth/verify', async (req, res, next) => {
+    try {
+      if (!blockchainAuthService) {
+        throw new AppError('Blockchain auth is disabled', 404, 'blockchain_auth_disabled');
+      }
+
+      const payload = await blockchainAuthService.verifyChallenge({
+        address: req.body && req.body.address,
+        nodeId: req.body && req.body.node_id,
+        challengeId: req.body && req.body.challenge_id,
+        signature: req.body && req.body.signature
+      });
+
+      res.json({
+        status: 'ok',
+        ...payload
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/v1/auth/demo-login', (req, res, next) => {
+    try {
+      if (!(config && config.auth && config.auth.demoMode)) {
+        throw new AppError('Demo auth is disabled', 404, 'auth_demo_disabled');
+      }
+      if (!blockchainAuthService || typeof blockchainAuthService.createDemoSession !== 'function') {
+        throw new AppError('Demo auth requires AUTH_MODE=hybrid or blockchain', 400, 'auth_mode_not_supported');
+      }
+
+      const address = req.body && req.body.address
+        ? String(req.body.address).trim()
+        : String(config.auth.demoAddress || '').trim();
+      const nodeId = req.body && req.body.node_id
+        ? String(req.body.node_id).trim()
+        : String(config.auth.demoNodeId || '').trim();
+
+      const payload = blockchainAuthService.createDemoSession({
+        address,
+        nodeId
+      });
+
+      res.json({
+        status: 'ok',
+        demo_mode: true,
+        ...payload
+      });
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.use('/v1', (req, res, next) => {

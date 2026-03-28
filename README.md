@@ -15,6 +15,7 @@
 - `GET /v1/capacity/engset` Engset 阻塞概率计算
 - `GET /v1/capacity/privacy-exhaustion` 虚拟号耗尽概率计算
 - 认证：静态 API Key（`x-api-key`）
+- 区块链鉴权 PoC：`/v1/auth/challenge` + `/v1/auth/verify`（返回 JWT Bearer）
 - 选号策略 `Φ`：按被叫一致性映射，忙线时回退可用虚拟号
 
 ## 目录结构
@@ -127,6 +128,64 @@ curl -H 'x-api-key: change-me-api-key' \
 curl -H 'x-api-key: change-me-api-key' \
   'http://127.0.0.1:8080/v1/capacity/privacy-exhaustion?N=1000&p=0.02&M=30'
 ```
+
+## 区块链鉴权最小演示（PoC）
+1. 在 `deploy/env/privacy-calling.env` 配置（建议先用 `hybrid`，保留 API Key 兜底）：
+```env
+AUTH_MODE=hybrid
+AUTH_ENABLE_API_KEY_FALLBACK=true
+AUTH_JWT_SECRET=change-me-jwt-secret
+AUTH_JWT_EXPIRES_SEC=300
+AUTH_CHALLENGE_TTL_SEC=60
+AUTH_DEMO_MODE=true
+AUTH_DEMO_ADDRESS=0x1111111111111111111111111111111111111111
+AUTH_DEMO_NODE_ID=demo-node
+CHAIN_RPC_URL=http://127.0.0.1:8545
+CHAIN_ALLOWLIST_MODE=static
+CHAIN_ALLOWED_ADDRESSES=0x1111111111111111111111111111111111111111
+```
+
+2. 重启服务：
+```bash
+sudo systemctl restart privacy-calling-api
+```
+
+3. 获取 challenge：
+```bash
+curl 'http://127.0.0.1:8080/v1/auth/challenge?address=0x1111111111111111111111111111111111111111&node_id=node-a'
+```
+
+4. 钱包对返回的 `message` 做 `personal_sign`，得到 `signature`。
+
+5. 提交验签换取 JWT：
+```bash
+curl -X POST 'http://127.0.0.1:8080/v1/auth/verify' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "address":"0x1111111111111111111111111111111111111111",
+    "node_id":"node-a",
+    "challenge_id":"<challenge_id>",
+    "signature":"<wallet_signature>"
+  }'
+```
+
+6. 使用 Bearer 调用受保护接口：
+```bash
+curl -H 'Authorization: Bearer <access_token>' \
+  'http://127.0.0.1:8080/v1/ops/overview'
+```
+
+无钱包快速演示（推荐）：
+```bash
+curl -X POST 'http://127.0.0.1:8080/v1/auth/demo-login' -H 'Content-Type: application/json' -d '{}'
+```
+返回 `access_token` 后同样用 `Authorization: Bearer ...` 访问受保护接口。  
+前端 `/dashboard` 也可直接点击“Demo 登录（免钱包）”按钮。
+
+说明：
+1. `AUTH_MODE=api_key` 时，行为与旧版一致，仅支持 `x-api-key`。
+2. `AUTH_MODE=hybrid` 时，支持 Bearer 和 API Key（可选 fallback）。
+3. `AUTH_MODE=blockchain` 时，仅支持 Bearer（默认不回退 API Key）。
 
 ## SIP 呼叫流程（V1）
 1. API 发起任务，选取虚拟号 `id_v`

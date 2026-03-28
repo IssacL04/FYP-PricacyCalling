@@ -1,8 +1,14 @@
 const { loadConfig } = require('./config');
 const { DatabaseService } = require('./db');
 const { ApiKeyAuthProvider } = require('./auth/api-key-auth-provider');
+const { JwtAuthProvider } = require('./auth/jwt-auth-provider');
+const { HybridAuthProvider } = require('./auth/hybrid-auth-provider');
+const { ChallengeStore } = require('./auth/challenge-store');
+const { BlockchainAuthService } = require('./auth/blockchain-auth-service');
 const { ConsistentCalleePolicy } = require('./policy/consistent-callee-policy');
 const { AmiClient } = require('./asterisk/ami-client');
+const { BlockchainAllowlistClient } = require('./blockchain/allowlist-client');
+const { SignatureRecoverClient } = require('./blockchain/signature-recover-client');
 const { CallStateMachine } = require('./services/call-state-machine');
 const { CallService } = require('./services/call-service');
 const { SystemServiceManager } = require('./services/system-service-manager');
@@ -12,7 +18,53 @@ const { createApp } = require('./app');
 async function main() {
   const config = loadConfig();
   const db = new DatabaseService(config.db.path);
-  const authProvider = new ApiKeyAuthProvider(config.app.apiKey);
+  const apiKeyAuthProvider = new ApiKeyAuthProvider(config.app.apiKey);
+  let authProvider = apiKeyAuthProvider;
+  let blockchainAuthService = null;
+  const shouldEnableJwtFlow = config.auth.mode === 'hybrid'
+    || config.auth.mode === 'blockchain'
+    || config.auth.demoMode;
+
+  if (shouldEnableJwtFlow) {
+    const jwtAuthProvider = new JwtAuthProvider(config.auth.jwtSecret);
+    const challengeStore = new ChallengeStore({
+      ttlSec: config.auth.challengeTtlSec
+    });
+    const allowlistClient = new BlockchainAllowlistClient({
+      mode: config.blockchain.allowlistMode,
+      rpcUrl: config.blockchain.rpcUrl,
+      contractAddress: config.blockchain.allowlistContract,
+      chainId: config.blockchain.chainId,
+      staticAllowedAddresses: config.blockchain.allowedAddresses
+    });
+    const signatureRecoverClient = new SignatureRecoverClient({
+      rpcUrl: config.blockchain.rpcUrl
+    });
+
+    blockchainAuthService = new BlockchainAuthService({
+      challengeStore,
+      allowlistClient,
+      signatureRecoverClient,
+      jwtSecret: config.auth.jwtSecret,
+      jwtExpiresSec: config.auth.jwtExpiresSec,
+      challengeTtlSec: config.auth.challengeTtlSec,
+      serverOrigin: `${config.app.host}:${config.app.port}`
+    });
+
+    let enableApiKeyFallback = false;
+    if (config.auth.mode === 'hybrid') {
+      enableApiKeyFallback = config.auth.enableApiKeyFallback;
+    } else if (config.auth.mode === 'api_key' && config.auth.demoMode) {
+      // In demo mode, keep API key as the default auth path but allow demo bearer token.
+      enableApiKeyFallback = true;
+    }
+
+    authProvider = new HybridAuthProvider({
+      jwtProvider: jwtAuthProvider,
+      apiKeyProvider: apiKeyAuthProvider,
+      enableApiKeyFallback
+    });
+  }
   const identityPolicy = new ConsistentCalleePolicy(db);
   const callStateMachine = new CallStateMachine(db);
 
@@ -77,6 +129,7 @@ async function main() {
 
   const app = createApp({
     authProvider,
+    blockchainAuthService,
     callService,
     db,
     amiClient,

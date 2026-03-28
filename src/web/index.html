@@ -27,12 +27,37 @@
 
     <main class="layout">
       <section class="card auth-card animate-in" style="--delay: 30ms">
-        <h2>API Key</h2>
-        <p class="muted">页面会调用受保护的 `/v1/ops/*` 接口，请先输入与你服务端一致的 `x-api-key`。</p>
+        <h2>鉴权</h2>
+        <p class="muted">支持 API Key 或 Demo JWT（免钱包演示）。Demo 登录仅在服务端开启 `AUTH_DEMO_MODE=true` 时可用。</p>
         <form id="apiKeyForm" class="auth-form">
           <input id="apiKeyInput" type="password" placeholder="输入 API Key" autocomplete="off" />
-          <button class="btn filled" type="submit">保存并连接</button>
+          <div class="auth-actions">
+            <button class="btn filled" type="submit">保存 API Key</button>
+            <button id="demoLoginBtn" class="btn outline" type="button">Blockchain Login</button>
+          </div>
         </form>
+        <p id="authModeText" class="muted">当前鉴权：未连接</p>
+        <section id="nodeSessionPanel" class="node-session">
+          <p class="node-session-title">当前节点会话</p>
+          <div class="node-session-grid">
+            <article>
+              <p class="label">Address</p>
+              <p id="nodeAddressValue" class="value mono">-</p>
+            </article>
+            <article>
+              <p class="label">Node ID</p>
+              <p id="nodeIdValue" class="value mono">-</p>
+            </article>
+            <article>
+              <p class="label">Auth Method</p>
+              <p id="nodeMethodValue" class="value mono">-</p>
+            </article>
+            <article>
+              <p class="label">Expires At</p>
+              <p id="nodeExpiresValue" class="value mono">-</p>
+            </article>
+          </div>
+        </section>
         <p id="statusText" class="status-text">等待连接...</p>
       </section>
 
