@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<rect x="0" y="0" width="100%" height="56" fill="#f4f8ff"/>
+<text x="90" y="34" font-size="24" font-family="Arial, sans-serif" fill="#1b2a41">Marginal Gain From Increasing Virtual Pool</text>
+<text x="90" y="54" font-size="13" font-family="Arial, sans-serif" fill="#415a77">Y shows additional create-success-rate gained when expanding virtual number pool</text>
+<line x1="90" y1="72.00" x2="780.00" y2="72.00" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="76.00" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.676</text>
+<line x1="90" y1="155.20" x2="780.00" y2="155.20" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="159.20" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.529</text>
+<line x1="90" y1="238.40" x2="780.00" y2="238.40" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="242.40" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.382</text>
+<line x1="90" y1="321.60" x2="780.00" y2="321.60" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="325.60" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.235</text>
+<line x1="90" y1="404.80" x2="780.00" y2="404.80" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="408.80" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.088</text>
+<line x1="90" y1="488.00" x2="780.00" y2="488.00" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="492.00" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">-0.059</text>
+<line x1="90.00" y1="72" x2="90.00" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="90.00" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">20</text>
+<line x1="262.50" y1="72" x2="262.50" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="262.50" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">40</text>
+<line x1="435.00" y1="72" x2="435.00" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="435.00" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">60</text>
+<line x1="607.50" y1="72" x2="607.50" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="607.50" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">80</text>
+<line x1="780.00" y1="72" x2="780.00" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="780.00" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">100</text>
+<line x1="90" y1="488.00" x2="780.00" y2="488.00" stroke="#2e3440" stroke-width="1.5"/>
+<line x1="90" y1="72" x2="90" y2="488.00" stroke="#2e3440" stroke-width="1.5"/>
+<text x="435.00" y="540.00" text-anchor="middle" font-size="13" font-family="Arial, sans-serif" fill="#2e3440">Online Users</text>
+<text x="20" y="280.00" transform="rotate(-90 20 280.00)" text-anchor="middle" font-size="13" font-family="Arial, sans-serif" fill="#2e3440">Delta Create Success Rate</text>
+<polyline points="90.00,291.86 262.50,383.91 435.00,402.77 607.50,408.67 780.00,423.56" fill="none" stroke="#ff7f0e" stroke-width="2.5"/>
+<circle cx="90.00" cy="291.86" r="3.5" fill="#ff7f0e"/>
+<circle cx="262.50" cy="383.91" r="3.5" fill="#ff7f0e"/>
+<circle cx="435.00" cy="402.77" r="3.5" fill="#ff7f0e"/>
+<circle cx="607.50" cy="408.67" r="3.5" fill="#ff7f0e"/>
+<circle cx="780.00" cy="423.56" r="3.5" fill="#ff7f0e"/>
+<polyline points="90.00,284.78 262.50,376.83 435.00,386.29 607.50,401.64 780.00,419.32" fill="none" stroke="#2ca02c" stroke-width="2.5"/>
+<circle cx="90.00" cy="284.78" r="3.5" fill="#2ca02c"/>
+<circle cx="262.50" cy="376.83" r="3.5" fill="#2ca02c"/>
+<circle cx="435.00" cy="386.29" r="3.5" fill="#2ca02c"/>
+<circle cx="607.50" cy="401.64" r="3.5" fill="#2ca02c"/>
+<circle cx="780.00" cy="419.32" r="3.5" fill="#2ca02c"/>
+<polyline points="90.00,121.92 262.50,306.02 435.00,334.35 607.50,355.59 780.00,388.16" fill="none" stroke="#1f77b4" stroke-width="2.5"/>
+<circle cx="90.00" cy="121.92" r="3.5" fill="#1f77b4"/>
+<circle cx="262.50" cy="306.02" r="3.5" fill="#1f77b4"/>
+<circle cx="435.00" cy="334.35" r="3.5" fill="#1f77b4"/>
+<circle cx="607.50" cy="355.59" r="3.5" fill="#1f77b4"/>
+<circle cx="780.00" cy="388.16" r="3.5" fill="#1f77b4"/>
+<line x1="800" y1="80" x2="822" y2="80" stroke="#ff7f0e" stroke-width="3"/>
+<text x="830" y="84" font-size="12" font-family="Arial, sans-serif" fill="#2e3440">gain 10->20 virtual</text>
+<line x1="800" y1="102" x2="822" y2="102" stroke="#2ca02c" stroke-width="3"/>
+<text x="830" y="106" font-size="12" font-family="Arial, sans-serif" fill="#2e3440">gain 20->30 virtual</text>
+<line x1="800" y1="124" x2="822" y2="124" stroke="#1f77b4" stroke-width="3"/>
+<text x="830" y="128" font-size="12" font-family="Arial, sans-serif" fill="#2e3440">gain 10->30 virtual</text>
+</svg>

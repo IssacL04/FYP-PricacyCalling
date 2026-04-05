@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<rect x="0" y="0" width="100%" height="56" fill="#f4f8ff"/>
+<text x="90" y="34" font-size="24" font-family="Arial, sans-serif" fill="#1b2a41">Server Load/Core vs Test Pressure</text>
+<text x="90" y="54" font-size="13" font-family="Arial, sans-serif" fill="#415a77">X: planned calls mean, Y: peak load per CPU (1m), grouped by virtual pool size</text>
+<line x1="90" y1="72.00" x2="780.00" y2="72.00" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="76.00" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.076</text>
+<line x1="90" y1="155.20" x2="780.00" y2="155.20" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="159.20" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.064</text>
+<line x1="90" y1="238.40" x2="780.00" y2="238.40" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="242.40" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.051</text>
+<line x1="90" y1="321.60" x2="780.00" y2="321.60" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="325.60" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.039</text>
+<line x1="90" y1="404.80" x2="780.00" y2="404.80" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="408.80" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.026</text>
+<line x1="90" y1="488.00" x2="780.00" y2="488.00" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="492.00" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.014</text>
+<line x1="90.00" y1="72" x2="90.00" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="90.00" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">40</text>
+<line x1="262.50" y1="72" x2="262.50" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="262.50" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">80</text>
+<line x1="435.00" y1="72" x2="435.00" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="435.00" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">120</text>
+<line x1="607.50" y1="72" x2="607.50" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="607.50" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">160</text>
+<line x1="780.00" y1="72" x2="780.00" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="780.00" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">200</text>
+<line x1="90" y1="488.00" x2="780.00" y2="488.00" stroke="#2e3440" stroke-width="1.5"/>
+<line x1="90" y1="72" x2="90" y2="488.00" stroke="#2e3440" stroke-width="1.5"/>
+<text x="435.00" y="540.00" text-anchor="middle" font-size="13" font-family="Arial, sans-serif" fill="#2e3440">Planned Calls (Mean)</text>
+<text x="20" y="280.00" transform="rotate(-90 20 280.00)" text-anchor="middle" font-size="13" font-family="Arial, sans-serif" fill="#2e3440">Peak Load/Core (1m)</text>
+<polyline points="90.00,121.92 262.50,180.49 435.00,238.40 607.50,288.32 780.00,338.24" fill="none" stroke="#1f77b4" stroke-width="2.5"/>
+<circle cx="90.00" cy="121.92" r="3.5" fill="#1f77b4"/>
+<circle cx="262.50" cy="180.49" r="3.5" fill="#1f77b4"/>
+<circle cx="435.00" cy="238.40" r="3.5" fill="#1f77b4"/>
+<circle cx="607.50" cy="288.32" r="3.5" fill="#1f77b4"/>
+<circle cx="780.00" cy="338.24" r="3.5" fill="#1f77b4"/>
+<polyline points="90.00,371.52 262.50,404.80 435.00,430.09 607.50,454.72 780.00,346.89" fill="none" stroke="#ff7f0e" stroke-width="2.5"/>
+<circle cx="90.00" cy="371.52" r="3.5" fill="#ff7f0e"/>
+<circle cx="262.50" cy="404.80" r="3.5" fill="#ff7f0e"/>
+<circle cx="435.00" cy="430.09" r="3.5" fill="#ff7f0e"/>
+<circle cx="607.50" cy="454.72" r="3.5" fill="#ff7f0e"/>
+<circle cx="780.00" cy="346.89" r="3.5" fill="#ff7f0e"/>
+<polyline points="90.00,363.53 262.50,396.81 435.00,430.09 607.50,313.61 780.00,354.88" fill="none" stroke="#2ca02c" stroke-width="2.5"/>
+<circle cx="90.00" cy="363.53" r="3.5" fill="#2ca02c"/>
+<circle cx="262.50" cy="396.81" r="3.5" fill="#2ca02c"/>
+<circle cx="435.00" cy="430.09" r="3.5" fill="#2ca02c"/>
+<circle cx="607.50" cy="313.61" r="3.5" fill="#2ca02c"/>
+<circle cx="780.00" cy="354.88" r="3.5" fill="#2ca02c"/>
+<line x1="800" y1="80" x2="822" y2="80" stroke="#1f77b4" stroke-width="3"/>
+<text x="830" y="84" font-size="12" font-family="Arial, sans-serif" fill="#2e3440">virtual=10</text>
+<line x1="800" y1="102" x2="822" y2="102" stroke="#ff7f0e" stroke-width="3"/>
+<text x="830" y="106" font-size="12" font-family="Arial, sans-serif" fill="#2e3440">virtual=20</text>
+<line x1="800" y1="124" x2="822" y2="124" stroke="#2ca02c" stroke-width="3"/>
+<text x="830" y="128" font-size="12" font-family="Arial, sans-serif" fill="#2e3440">virtual=30</text>
+</svg>

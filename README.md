@@ -17,6 +17,7 @@
 - 认证：静态 API Key（`x-api-key`）
 - 区块链鉴权 PoC：`/v1/auth/challenge` + `/v1/auth/verify`（返回 JWT Bearer）
 - 选号策略 `Φ`：按被叫一致性映射，忙线时回退可用虚拟号
+- SIP 客户端直拨支持 AstDB 动态映射（无需在 `extensions.conf` 为每个用户写硬编码）
 
 ## 目录结构
 - `src/` Node.js 服务源码
@@ -50,6 +51,38 @@ export $(grep -v '^#' deploy/env/privacy-calling.env | xargs)
 npm start
 ```
 
+## 批量扩容用户（示例：100 用户）
+1. 生成用户、虚拟号、映射和 Asterisk endpoint 配置
+```bash
+npm run users:provision -- --count 100
+```
+
+输出内容：
+1. SQLite：`users` / `virtual_numbers` / `id_mappings` 已 upsert
+2. `deploy/asterisk/pjsip.generated.conf`：批量 endpoint/auth/aor
+3. `data/generated-users.csv`：SIP 账号、密码、E.164 凭据清单
+4. 默认启用静态 contact：`sip:<endpoint>@127.0.0.1:17060`（用于压测模拟在线）
+
+如需改回“真实客户端注册”模式（不写静态 contact）：
+```bash
+npm run users:provision -- --count 100 --use-static-contact false
+```
+
+2. 下发 Asterisk 配置并重启
+```bash
+sudo ./scripts/deploy-asterisk-config.sh
+```
+
+3. 启动 SIP loadbot（模拟 100 用户“在线并可应答”）
+```bash
+npm run sip:loadbot -- --port 17060 --auto-bye-ms 1500
+```
+
+4. 同步 SQLite 映射到 Asterisk AstDB（供 `extensions.conf` 动态查表）
+```bash
+sudo ./scripts/sync-asterisk-astdb.sh
+```
+
 ## Asterisk 部署
 1. 安装系统组件（root）
 ```bash
@@ -64,6 +97,7 @@ sudo ./scripts/install-system.sh
 3. 下发配置并重启 Asterisk（root）
 ```bash
 sudo ./scripts/deploy-asterisk-config.sh
+sudo ./scripts/sync-asterisk-astdb.sh
 ```
 
 4. systemd 托管 Node API（root）
@@ -193,6 +227,27 @@ curl -X POST 'http://127.0.0.1:8080/v1/auth/demo-login' -H 'Content-Type: applic
 3. A-leg 接通后进入 `privacy_bridge`，拨 B-leg
 4. B-leg 呼叫时设置 `CALLERID(num)=id_v`
 5. A/B 桥接后通话，AMI `UserEvent` 回写状态到 SQLite
+
+## 并发容量趋势测试（自动阶梯）
+脚本会按用户规模阶梯发起并发呼叫，并采集：
+1. 通话创建成功率、终态统计（completed/failed/timeout）
+2. 创建时延与收敛时延分位数（P50/P95）
+3. `/v1/ops/overview` 的资源峰值（active calls、load/core、heap 比例、RSS）
+
+示例：
+```bash
+npm run bench:capacity -- \
+  --base-url http://127.0.0.1:8080 \
+  --api-key change-me-api-key \
+  --user-steps 20,40,60,80,100 \
+  --calls-per-user 2 \
+  --max-parallel 30 \
+  --min-stage-duration-ms 12000
+```
+
+输出：
+1. `data/capacity-trend-<timestamp>.json`
+2. `data/capacity-trend-<timestamp>.csv`
 
 ## 说明
 - V1 默认 `SIP/UDP + RTP`，未启用 TLS/SRTP。

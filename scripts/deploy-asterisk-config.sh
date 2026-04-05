@@ -11,6 +11,7 @@ SOURCE_DIR="$PROJECT_ROOT/deploy/asterisk"
 TARGET_DIR="/etc/asterisk"
 
 install -m 0644 "$SOURCE_DIR/pjsip.conf" "$TARGET_DIR/pjsip.conf"
+install -m 0644 "$SOURCE_DIR/pjsip.generated.conf" "$TARGET_DIR/pjsip.generated.conf"
 install -m 0644 "$SOURCE_DIR/extensions.conf" "$TARGET_DIR/extensions.conf"
 install -m 0644 "$SOURCE_DIR/manager.conf" "$TARGET_DIR/manager.conf"
 install -m 0644 "$SOURCE_DIR/rtp.conf" "$TARGET_DIR/rtp.conf"

@@ -1,0 +1,277 @@
+{
+  "generated_at": "2026-04-04T11:08:55.769Z",
+  "base_url": "http://127.0.0.1:8080",
+  "db_path": "/home/ubuntu/fyp/PrivacyCalling/data/privacy.db",
+  "settings": {
+    "user_steps": [
+      20,
+      40,
+      60,
+      80,
+      100
+    ],
+    "user_id_like": "user-u%",
+    "calls_per_user": 2,
+    "max_parallel": 30,
+    "call_timeout_sec": 25,
+    "poll_interval_ms": 1000,
+    "poll_timeout_ms": 45000,
+    "sampler_interval_ms": 2000,
+    "cooldown_ms": 1500,
+    "min_stage_duration_ms": 8000
+  },
+  "results": [
+    {
+      "user_count": 20,
+      "planned_calls": 40,
+      "create_success": 8,
+      "create_failed": 32,
+      "terminal_completed": 8,
+      "terminal_failed": 0,
+      "terminal_timeout": 0,
+      "metrics": {
+        "create_p50_ms": 93,
+        "create_p95_ms": 104,
+        "settle_p50_ms": 2010,
+        "settle_p95_ms": 2011,
+        "lifecycle_p50_ms": 1483,
+        "lifecycle_p95_ms": 1490,
+        "peak_active_calls": 10,
+        "peak_load_per_cpu_1m": 0.06,
+        "peak_heap_usage_ratio": 0.6932,
+        "peak_rss_mb": 66.25,
+        "overview_samples": 4,
+        "overview_sample_errors": 0
+      },
+      "sample_failures": [
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool"
+      ],
+      "terminal_failure_reasons": {},
+      "stage_started_at": "2026-04-04T11:08:08.210Z",
+      "stage_ended_at": "2026-04-04T11:08:16.222Z",
+      "overview_before": {
+        "active_calls": 2,
+        "load_per_cpu_1m": 0.0425,
+        "heap_usage_ratio": 0.5596,
+        "rss_mb": 66.09
+      },
+      "overview_after": {
+        "active_calls": 2,
+        "load_per_cpu_1m": 0.055,
+        "heap_usage_ratio": 0.6488,
+        "rss_mb": 65.48
+      }
+    },
+    {
+      "user_count": 40,
+      "planned_calls": 80,
+      "create_success": 8,
+      "create_failed": 72,
+      "terminal_completed": 8,
+      "terminal_failed": 0,
+      "terminal_timeout": 0,
+      "metrics": {
+        "create_p50_ms": 41,
+        "create_p95_ms": 87,
+        "settle_p50_ms": 2010,
+        "settle_p95_ms": 2011,
+        "lifecycle_p50_ms": 1460,
+        "lifecycle_p95_ms": 1489,
+        "peak_active_calls": 10,
+        "peak_load_per_cpu_1m": 0.055,
+        "peak_heap_usage_ratio": 0.8725,
+        "peak_rss_mb": 58.57,
+        "overview_samples": 4,
+        "overview_sample_errors": 0
+      },
+      "sample_failures": [
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool"
+      ],
+      "terminal_failure_reasons": {},
+      "stage_started_at": "2026-04-04T11:08:17.722Z",
+      "stage_ended_at": "2026-04-04T11:08:25.733Z",
+      "overview_before": {
+        "active_calls": 2,
+        "load_per_cpu_1m": 0.055,
+        "heap_usage_ratio": 0.66,
+        "rss_mb": 65.48
+      },
+      "overview_after": {
+        "active_calls": 2,
+        "load_per_cpu_1m": 0.05,
+        "heap_usage_ratio": 0.8197,
+        "rss_mb": 59.13
+      }
+    },
+    {
+      "user_count": 60,
+      "planned_calls": 120,
+      "create_success": 10,
+      "create_failed": 110,
+      "terminal_completed": 8,
+      "terminal_failed": 2,
+      "terminal_timeout": 0,
+      "metrics": {
+        "create_p50_ms": 44,
+        "create_p95_ms": 77,
+        "settle_p50_ms": 2008,
+        "settle_p95_ms": 2010,
+        "lifecycle_p50_ms": 1469,
+        "lifecycle_p95_ms": 1478,
+        "peak_active_calls": 10,
+        "peak_load_per_cpu_1m": 0.0475,
+        "peak_heap_usage_ratio": 0.9553,
+        "peak_rss_mb": 60.32,
+        "overview_samples": 4,
+        "overview_sample_errors": 0
+      },
+      "sample_failures": [
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool"
+      ],
+      "terminal_failure_reasons": {
+        "127": 2
+      },
+      "stage_started_at": "2026-04-04T11:08:27.234Z",
+      "stage_ended_at": "2026-04-04T11:08:35.245Z",
+      "overview_before": {
+        "active_calls": 2,
+        "load_per_cpu_1m": 0.0475,
+        "heap_usage_ratio": 0.9282,
+        "rss_mb": 55.12
+      },
+      "overview_after": {
+        "active_calls": 2,
+        "load_per_cpu_1m": 0.0425,
+        "heap_usage_ratio": 0.9479,
+        "rss_mb": 57.9
+      }
+    },
+    {
+      "user_count": 80,
+      "planned_calls": 160,
+      "create_success": 8,
+      "create_failed": 152,
+      "terminal_completed": 8,
+      "terminal_failed": 0,
+      "terminal_timeout": 0,
+      "metrics": {
+        "create_p50_ms": 36,
+        "create_p95_ms": 95,
+        "settle_p50_ms": 2009,
+        "settle_p95_ms": 2010,
+        "lifecycle_p50_ms": 1475,
+        "lifecycle_p95_ms": 1486,
+        "peak_active_calls": 10,
+        "peak_load_per_cpu_1m": 0.04,
+        "peak_heap_usage_ratio": 0.9505,
+        "peak_rss_mb": 63.88,
+        "overview_samples": 4,
+        "overview_sample_errors": 0
+      },
+      "sample_failures": [
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool"
+      ],
+      "terminal_failure_reasons": {},
+      "stage_started_at": "2026-04-04T11:08:36.745Z",
+      "stage_ended_at": "2026-04-04T11:08:44.758Z",
+      "overview_before": {
+        "active_calls": 2,
+        "load_per_cpu_1m": 0.04,
+        "heap_usage_ratio": 0.9026,
+        "rss_mb": 58.16
+      },
+      "overview_after": {
+        "active_calls": 2,
+        "load_per_cpu_1m": 0.035,
+        "heap_usage_ratio": 0.8537,
+        "rss_mb": 64.04
+      }
+    },
+    {
+      "user_count": 100,
+      "planned_calls": 200,
+      "create_success": 10,
+      "create_failed": 190,
+      "terminal_completed": 10,
+      "terminal_failed": 0,
+      "terminal_timeout": 0,
+      "metrics": {
+        "create_p50_ms": 32,
+        "create_p95_ms": 123,
+        "settle_p50_ms": 2007,
+        "settle_p95_ms": 2008,
+        "lifecycle_p50_ms": 1466,
+        "lifecycle_p95_ms": 1475,
+        "peak_active_calls": 10,
+        "peak_load_per_cpu_1m": 0.0325,
+        "peak_heap_usage_ratio": 0.9539,
+        "peak_rss_mb": 64.38,
+        "overview_samples": 4,
+        "overview_sample_errors": 0
+      },
+      "sample_failures": [
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool",
+        "No available virtual number in pool"
+      ],
+      "terminal_failure_reasons": {},
+      "stage_started_at": "2026-04-04T11:08:46.258Z",
+      "stage_ended_at": "2026-04-04T11:08:54.269Z",
+      "overview_before": {
+        "active_calls": 2,
+        "load_per_cpu_1m": 0.0325,
+        "heap_usage_ratio": 0.8669,
+        "rss_mb": 64.05
+      },
+      "overview_after": {
+        "active_calls": 2,
+        "load_per_cpu_1m": 0.03,
+        "heap_usage_ratio": 0.5858,
+        "rss_mb": 64.93
+      }
+    }
+  ]
+}

@@ -7,7 +7,13 @@
     "start": "node src/index.js",
     "test": "node --test",
     "db:init": "node scripts/init-db.js",
-    "db:seed": "node scripts/seed-demo.js"
+    "db:seed": "node scripts/seed-demo.js",
+    "users:provision": "node scripts/provision-bulk-users.js",
+    "asterisk:sync-astdb": "bash scripts/sync-asterisk-astdb.sh",
+    "bench:capacity": "node scripts/benchmark-capacity.js",
+    "bench:matrix": "node scripts/benchmark-matrix.js",
+    "chart:matrix": "node scripts/generate-matrix-charts.js",
+    "sip:loadbot": "node scripts/sip-loadbot.js"
   },
   "keywords": [
     "sip",

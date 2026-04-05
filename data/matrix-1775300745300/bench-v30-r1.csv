@@ -1,0 +1,6 @@
+user_count,planned_calls,create_success,create_failed,terminal_completed,terminal_failed,terminal_timeout,create_p95_ms,settle_p95_ms,lifecycle_p95_ms,peak_active_calls,peak_load_per_cpu_1m,peak_heap_usage_ratio,peak_rss_mb,overview_samples,overview_sample_errors
+20,40,31,9,29,2,0,187,2034,1499,30,0.035,0.8901,85.11,4,0
+40,80,29,51,28,1,0,224,2028,1511,19,0.03,0.8482,53.18,4,0
+60,120,29,91,29,0,0,208,2029,1491,23,0.025,0.9412,57.51,4,0
+80,160,36,124,31,5,0,246,2024,1496,20,0.0625,0.7262,59.38,4,0
+100,200,36,164,32,4,0,174,2031,1491,29,0.0525,0.753,65.97,4,0

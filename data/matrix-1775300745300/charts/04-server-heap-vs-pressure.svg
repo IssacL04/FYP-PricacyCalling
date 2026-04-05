@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<rect x="0" y="0" width="100%" height="56" fill="#f4f8ff"/>
+<text x="90" y="34" font-size="24" font-family="Arial, sans-serif" fill="#1b2a41">Server Heap Ratio vs Test Pressure</text>
+<text x="90" y="54" font-size="13" font-family="Arial, sans-serif" fill="#415a77">X: planned calls mean, Y: peak heap usage ratio, grouped by virtual pool size</text>
+<line x1="90" y1="72.00" x2="780.00" y2="72.00" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="76.00" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.964</text>
+<line x1="90" y1="155.20" x2="780.00" y2="155.20" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="159.20" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.888</text>
+<line x1="90" y1="238.40" x2="780.00" y2="238.40" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="242.40" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.811</text>
+<line x1="90" y1="321.60" x2="780.00" y2="321.60" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="325.60" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.734</text>
+<line x1="90" y1="404.80" x2="780.00" y2="404.80" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="408.80" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.658</text>
+<line x1="90" y1="488.00" x2="780.00" y2="488.00" stroke="#e5e9f0" stroke-width="1"/>
+<text x="78.00" y="492.00" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">0.581</text>
+<line x1="90.00" y1="72" x2="90.00" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="90.00" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">40</text>
+<line x1="262.50" y1="72" x2="262.50" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="262.50" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">80</text>
+<line x1="435.00" y1="72" x2="435.00" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="435.00" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">120</text>
+<line x1="607.50" y1="72" x2="607.50" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="607.50" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">160</text>
+<line x1="780.00" y1="72" x2="780.00" y2="488.00" stroke="#f1f3f8" stroke-width="1"/>
+<text x="780.00" y="510.00" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#4c566a">200</text>
+<line x1="90" y1="488.00" x2="780.00" y2="488.00" stroke="#2e3440" stroke-width="1.5"/>
+<line x1="90" y1="72" x2="90" y2="488.00" stroke="#2e3440" stroke-width="1.5"/>
+<text x="435.00" y="540.00" text-anchor="middle" font-size="13" font-family="Arial, sans-serif" fill="#2e3440">Planned Calls (Mean)</text>
+<text x="20" y="280.00" transform="rotate(-90 20 280.00)" text-anchor="middle" font-size="13" font-family="Arial, sans-serif" fill="#2e3440">Peak Heap Usage Ratio</text>
+<polyline points="90.00,431.27 262.50,339.62 435.00,273.39 607.50,330.50 780.00,375.67" fill="none" stroke="#1f77b4" stroke-width="2.5"/>
+<circle cx="90.00" cy="431.27" r="3.5" fill="#1f77b4"/>
+<circle cx="262.50" cy="339.62" r="3.5" fill="#1f77b4"/>
+<circle cx="435.00" cy="273.39" r="3.5" fill="#1f77b4"/>
+<circle cx="607.50" cy="330.50" r="3.5" fill="#1f77b4"/>
+<circle cx="780.00" cy="375.67" r="3.5" fill="#1f77b4"/>
+<polyline points="90.00,368.07 262.50,313.46 435.00,394.78 607.50,454.72 780.00,322.03" fill="none" stroke="#ff7f0e" stroke-width="2.5"/>
+<circle cx="90.00" cy="368.07" r="3.5" fill="#ff7f0e"/>
+<circle cx="262.50" cy="313.46" r="3.5" fill="#ff7f0e"/>
+<circle cx="435.00" cy="394.78" r="3.5" fill="#ff7f0e"/>
+<circle cx="607.50" cy="454.72" r="3.5" fill="#ff7f0e"/>
+<circle cx="780.00" cy="322.03" r="3.5" fill="#ff7f0e"/>
+<polyline points="90.00,235.06 262.50,193.47 435.00,121.92 607.50,302.82 780.00,245.70" fill="none" stroke="#2ca02c" stroke-width="2.5"/>
+<circle cx="90.00" cy="235.06" r="3.5" fill="#2ca02c"/>
+<circle cx="262.50" cy="193.47" r="3.5" fill="#2ca02c"/>
+<circle cx="435.00" cy="121.92" r="3.5" fill="#2ca02c"/>
+<circle cx="607.50" cy="302.82" r="3.5" fill="#2ca02c"/>
+<circle cx="780.00" cy="245.70" r="3.5" fill="#2ca02c"/>
+<line x1="800" y1="80" x2="822" y2="80" stroke="#1f77b4" stroke-width="3"/>
+<text x="830" y="84" font-size="12" font-family="Arial, sans-serif" fill="#2e3440">virtual=10</text>
+<line x1="800" y1="102" x2="822" y2="102" stroke="#ff7f0e" stroke-width="3"/>
+<text x="830" y="106" font-size="12" font-family="Arial, sans-serif" fill="#2e3440">virtual=20</text>
+<line x1="800" y1="124" x2="822" y2="124" stroke="#2ca02c" stroke-width="3"/>
+<text x="830" y="128" font-size="12" font-family="Arial, sans-serif" fill="#2e3440">virtual=30</text>
+</svg>
