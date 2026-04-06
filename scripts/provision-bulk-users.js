@@ -118,6 +118,7 @@ function renderGeneratedPjsip(users, { useStaticContact, contactHost, contactPor
     lines.push('type=endpoint');
     lines.push('transport=transport-udp-privacy');
     lines.push('context=caller_in');
+    lines.push('message_context=privacy_message_in');
     lines.push('disallow=all');
     lines.push('allow=ulaw');
     lines.push(`auth=${endpoint}`);

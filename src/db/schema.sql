@@ -83,6 +83,30 @@ CREATE TABLE IF NOT EXISTS call_legs (
 
 CREATE INDEX IF NOT EXISTS idx_call_legs_call_id ON call_legs(call_id);
 
+CREATE TABLE IF NOT EXISTS messages (
+  id TEXT PRIMARY KEY,
+  sender_user_id TEXT NOT NULL,
+  sender_endpoint TEXT NOT NULL,
+  sender_real_e164 TEXT NOT NULL,
+  target_endpoint TEXT NOT NULL,
+  target_e164 TEXT NOT NULL,
+  selected_virtual_e164 TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  body TEXT NOT NULL,
+  body_bytes INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  failure_reason TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  delivered_at TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (sender_user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_messages_status ON messages(status);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_sender_user_id ON messages(sender_user_id);
+CREATE INDEX IF NOT EXISTS idx_messages_target_endpoint ON messages(target_endpoint);
+
 CREATE TABLE IF NOT EXISTS ops_audit_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   actor TEXT NOT NULL,

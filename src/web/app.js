@@ -54,6 +54,7 @@ const els = {
   servicesGrid: document.getElementById('servicesGrid'),
   statsGrid: document.getElementById('statsGrid'),
   recentCallsBody: document.getElementById('recentCallsBody'),
+  recentMessagesBody: document.getElementById('recentMessagesBody'),
   logsMeta: document.getElementById('logsMeta'),
   logsServiceFilters: document.getElementById('logsServiceFilters'),
   logsLevelFilters: document.getElementById('logsLevelFilters'),
@@ -399,6 +400,7 @@ function renderOverview(data) {
   renderServices(data.services || [], data.capabilities || {});
   renderStats(data.database || {});
   renderRecentCalls(data.recent_calls || []);
+  renderRecentMessages(data.recent_messages || []);
 }
 
 function renderServices(services, capabilities) {
@@ -459,14 +461,22 @@ function renderServices(services, capabilities) {
 
 function renderStats(database) {
   const calls = database.calls || {};
+  const messages = database.messages || {};
   const users = database.users || {};
   const virtuals = database.virtual_numbers || {};
+  const messageTotal = Number(messages.total || 0);
+  const messageFailed = Number(messages.failed || 0);
+  const messageFailureRate = messageTotal > 0
+    ? formatPercent(messageFailed / messageTotal, 1)
+    : '0.0%';
 
   const items = [
     ['总通话', calls.total],
     ['活跃通话', calls.active],
     ['24h 通话', calls.last_24h],
     ['24h 失败', calls.failed_last_24h],
+    ['总消息', messages.total || 0],
+    ['消息失败率', messageFailureRate],
     ['用户(启用)', `${users.enabled || 0}/${users.total || 0}`],
     ['虚拟号(启用)', `${virtuals.enabled || 0}/${virtuals.total || 0}`]
   ];
@@ -516,6 +526,42 @@ function renderRecentCalls(calls) {
     });
 
     els.recentCallsBody.appendChild(row);
+  });
+}
+
+function renderRecentMessages(messages) {
+  if (!els.recentMessagesBody) {
+    return;
+  }
+
+  els.recentMessagesBody.innerHTML = '';
+  if (!messages.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 6;
+    cell.textContent = '暂无消息记录';
+    row.appendChild(cell);
+    els.recentMessagesBody.appendChild(row);
+    return;
+  }
+
+  messages.forEach((message) => {
+    const row = document.createElement('tr');
+
+    [
+      message.message_id || '-',
+      message.status || '-',
+      message.sender_endpoint || message.sender_user_id || '-',
+      message.target_endpoint || message.target_e164 || '-',
+      message.selected_virtual_e164 || '-',
+      message.created_at || '-'
+    ].forEach((value) => {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      row.appendChild(cell);
+    });
+
+    els.recentMessagesBody.appendChild(row);
   });
 }
 

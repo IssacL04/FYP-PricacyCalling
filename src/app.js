@@ -11,8 +11,13 @@ const AUDIT_ACTION_ALLOW_LIST = new Set([
   'logs_tail_resumed',
   'logs_export_json',
   'logs_manual_refresh',
-  'logs_filters_updated'
+  'logs_filters_updated',
+  'messages_manual_refresh',
+  'messages_filters_updated',
+  'messages_export_json'
 ]);
+
+const MESSAGE_STATUS_ALLOW_LIST = new Set(['created', 'routing', 'delivered', 'failed']);
 
 function parseNumber(name, value) {
   const parsed = Number(value);
@@ -177,6 +182,9 @@ function createApp({
       const amiState = amiClient.status();
       const summary = db.getDashboardSummary();
       const recentCalls = db.getRecentCalls(10);
+      const recentMessages = typeof db.getRecentMessages === 'function'
+        ? db.getRecentMessages(10)
+        : [];
       const mem = process.memoryUsage();
       const metricsBundle = buildOpsMetricsAndAlerts({
         summary,
@@ -206,6 +214,7 @@ function createApp({
         services,
         database: summary,
         recent_calls: recentCalls,
+        recent_messages: recentMessages,
         system: metricsBundle.system,
         metrics: metricsBundle.metrics,
         thresholds: metricsBundle.thresholds,
@@ -385,6 +394,59 @@ function createApp({
   app.get('/v1/calls/:id', (req, res, next) => {
     try {
       const found = callService.getCall(req.params.id);
+      res.json(found);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/v1/messages', (req, res, next) => {
+    try {
+      if (!db || typeof db.listMessages !== 'function') {
+        throw new AppError('Message store is unavailable', 503, 'message_store_unavailable');
+      }
+
+      const limit = parseLimit(req.query.limit, 30, 200);
+      const statusRaw = req.query && req.query.status
+        ? String(req.query.status).trim().toLowerCase()
+        : '';
+      const status = statusRaw || null;
+      if (status && !MESSAGE_STATUS_ALLOW_LIST.has(status)) {
+        throw new AppError('Unsupported message status filter', 400, 'invalid_message_status');
+      }
+
+      const sinceSecRaw = Number.parseInt(req.query.since_sec, 10);
+      const sinceSec = Number.isFinite(sinceSecRaw) && sinceSecRaw > 0
+        ? Math.min(sinceSecRaw, 7 * 24 * 3600)
+        : null;
+
+      const messages = db.listMessages({
+        limit,
+        status,
+        sinceSec
+      });
+
+      res.json({
+        messages,
+        limit,
+        status,
+        since_sec: sinceSec
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/v1/messages/:id', (req, res, next) => {
+    try {
+      if (!db || typeof db.getMessageById !== 'function') {
+        throw new AppError('Message store is unavailable', 503, 'message_store_unavailable');
+      }
+
+      const found = db.getMessageById(req.params.id);
+      if (!found) {
+        throw new AppError('message not found', 404, 'message_not_found');
+      }
       res.json(found);
     } catch (error) {
       next(error);

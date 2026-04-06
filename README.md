@@ -8,10 +8,12 @@
 ## 功能覆盖
 - `POST /v1/calls` 回拨式发起隐私通话
 - `GET /v1/calls/{id}` 查询会话状态
+- `GET /v1/messages` / `GET /v1/messages/{id}` 查询 SIP MESSAGE 投递终态
 - `GET /health` 健康检查
 - `GET /dashboard` Material You 风格运维面板（服务状态/快捷操作）
 - Dashboard V2：告警中心、服务器负载曲线、分级日志高亮、操作审计时间线
 - 运维面板“最近通话”同时覆盖 API 回拨与客户端直拨
+- SIP 客户端原生文本（SIP MESSAGE）隐私转发（仅内网 SIP，在线即投递）
 - `GET /v1/capacity/engset` Engset 阻塞概率计算
 - `GET /v1/capacity/privacy-exhaustion` 虚拟号耗尽概率计算
 - 认证：静态 API Key（`x-api-key`）
@@ -21,7 +23,7 @@
 
 ## 目录结构
 - `src/` Node.js 服务源码
-- `src/db/schema.sql` SQLite 表结构（users, virtual_numbers, trunks, calls, call_legs, id_mappings）
+- `src/db/schema.sql` SQLite 表结构（users, virtual_numbers, trunks, calls, call_legs, id_mappings, messages）
 - `deploy/asterisk/` Asterisk 配置模板
 - `deploy/systemd/` systemd 单元文件
 - `scripts/` 初始化、部署脚本
@@ -130,6 +132,15 @@ curl -X POST 'http://127.0.0.1:8080/v1/calls' \
 ```bash
 curl -H 'x-api-key: change-me-api-key' \
   'http://127.0.0.1:8080/v1/calls/<call_id>'
+```
+
+### 查询消息状态
+```bash
+curl -H 'x-api-key: change-me-api-key' \
+  'http://127.0.0.1:8080/v1/messages?limit=20&status=failed&since_sec=3600'
+
+curl -H 'x-api-key: change-me-api-key' \
+  'http://127.0.0.1:8080/v1/messages/<message_id>'
 ```
 
 ### 运维面板概览

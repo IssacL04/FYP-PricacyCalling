@@ -667,7 +667,7 @@ th {
       'services services'
       'logs logs'
       'audit calls'
-      'stats calls';
+      'stats messages';
   }
 
   .auth-card {
@@ -704,5 +704,9 @@ th {
 
   .calls-card {
     grid-area: calls;
+  }
+
+  .messages-card {
+    grid-area: messages;
   }
 }

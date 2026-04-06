@@ -29,6 +29,27 @@ function computeTerminalStatus(current, reason) {
   return 'failed';
 }
 
+function normalizeMessageState(rawState) {
+  const state = String(rawState || '').trim().toLowerCase();
+  if (state === 'created' || state === 'routing' || state === 'delivered' || state === 'failed') {
+    return state;
+  }
+  return '';
+}
+
+function decodeBodyEncoded(value) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '';
+  }
+
+  try {
+    return decodeURIComponent(raw);
+  } catch (error) {
+    return raw;
+  }
+}
+
 class CallStateMachine {
   constructor(db) {
     this.db = db;
@@ -59,6 +80,11 @@ class CallStateMachine {
 
     if (event.Event === 'UserEvent' && event.UserEvent === 'PrivacyClientCallCreate') {
       this.handlePrivacyClientCreateEvent(event);
+      return;
+    }
+
+    if (event.Event === 'UserEvent' && event.UserEvent === 'PrivacyMessageState') {
+      this.handlePrivacyMessageStateEvent(event);
       return;
     }
 
@@ -308,6 +334,51 @@ class CallStateMachine {
       bridgeStatus: current.bridge_status === 'bridged' ? 'released' : 'pending',
       failureReason: finalStatus === 'failed' ? current.failure_reason || 'hangup_before_bridge' : null,
       endedAt: nowSql()
+    });
+  }
+
+  handlePrivacyMessageStateEvent(event) {
+    const messageId = String(event.MessageID || event.MessageId || event.MsgID || '').trim();
+    if (!messageId) {
+      return;
+    }
+
+    const state = normalizeMessageState(event.State);
+    if (!state) {
+      return;
+    }
+
+    const senderEndpoint = String(event.SenderEndpoint || '').trim();
+    const senderUser = senderEndpoint ? this.db.getUserByEndpoint(senderEndpoint) : null;
+    if (!senderUser) {
+      return;
+    }
+
+    const targetEndpoint = String(event.TargetEndpoint || '').trim();
+    const targetE164 = String(event.TargetE164 || '').trim();
+    const selectedVirtualE164 = String(event.VirtualID || '').trim();
+    const contentType = String(event.ContentType || 'text/plain').trim() || 'text/plain';
+    const body = decodeBodyEncoded(event.BodyEncoded);
+    const bodyBytesRaw = Number.parseInt(event.BodyBytes, 10);
+    const bodyBytes = Number.isFinite(bodyBytesRaw) && bodyBytesRaw >= 0
+      ? bodyBytesRaw
+      : Buffer.byteLength(body, 'utf8');
+    const reason = event.Reason ? String(event.Reason).trim() : null;
+
+    this.db.upsertMessageEvent({
+      id: messageId,
+      sender_user_id: senderUser.id,
+      sender_endpoint: senderEndpoint,
+      sender_real_e164: senderUser.real_e164,
+      target_endpoint: targetEndpoint,
+      target_e164: targetE164,
+      selected_virtual_e164: selectedVirtualE164,
+      content_type: contentType,
+      body,
+      body_bytes: bodyBytes,
+      status: state,
+      failure_reason: state === 'failed' ? reason || 'message_failed' : null,
+      delivered_at: state === 'delivered' ? nowSql() : null
     });
   }
 }

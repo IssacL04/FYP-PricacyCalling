@@ -338,3 +338,47 @@ test('state machine marks normal clearing as completed when legs are not failed'
   db.close();
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
+
+test('state machine persists PrivacyMessageState lifecycle events', () => {
+  const { db, tempDir } = setupDb();
+  const sm = new CallStateMachine(db);
+  const body = 'hello bob';
+
+  sm.processEvent({
+    Event: 'UserEvent',
+    UserEvent: 'PrivacyMessageState',
+    MessageID: 'msg-123',
+    State: 'created',
+    SenderEndpoint: 'alice',
+    TargetEndpoint: 'bob',
+    TargetE164: '+8613900000002',
+    VirtualID: '+8613800011111',
+    ContentType: 'text/plain',
+    BodyBytes: String(Buffer.byteLength(body, 'utf8')),
+    BodyEncoded: encodeURIComponent(body)
+  });
+
+  sm.processEvent({
+    Event: 'UserEvent',
+    UserEvent: 'PrivacyMessageState',
+    MessageID: 'msg-123',
+    State: 'delivered',
+    SenderEndpoint: 'alice',
+    TargetEndpoint: 'bob',
+    TargetE164: '+8613900000002',
+    VirtualID: '+8613800011111',
+    ContentType: 'text/plain',
+    BodyBytes: String(Buffer.byteLength(body, 'utf8')),
+    BodyEncoded: encodeURIComponent(body)
+  });
+
+  const message = db.getMessageById('msg-123');
+  assert.ok(message);
+  assert.equal(message.status, 'delivered');
+  assert.equal(message.sender_user_id, 'caller-1');
+  assert.equal(message.selected_virtual_e164, '+8613800011111');
+  assert.equal(message.body, body);
+
+  db.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});

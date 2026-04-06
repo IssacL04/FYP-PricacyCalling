@@ -4,6 +4,7 @@ const Database = require('better-sqlite3');
 const { AppError } = require('../utils/errors');
 
 const ACTIVE_CALL_STATUSES = ['originating', 'ringing', 'answered', 'bridged'];
+const MESSAGE_STATUSES = ['created', 'routing', 'delivered', 'failed'];
 
 function nowExpr() {
   return "datetime('now')";
@@ -139,6 +140,119 @@ class DatabaseService {
           failure_reason
         FROM calls
         ORDER BY created_at DESC
+        LIMIT ?
+      `),
+      upsertMessage: this.db.prepare(`
+        INSERT INTO messages (
+          id,
+          sender_user_id,
+          sender_endpoint,
+          sender_real_e164,
+          target_endpoint,
+          target_e164,
+          selected_virtual_e164,
+          content_type,
+          body,
+          body_bytes,
+          status,
+          failure_reason,
+          delivered_at,
+          created_at,
+          updated_at
+        ) VALUES (
+          @id,
+          @sender_user_id,
+          @sender_endpoint,
+          @sender_real_e164,
+          @target_endpoint,
+          @target_e164,
+          @selected_virtual_e164,
+          @content_type,
+          @body,
+          @body_bytes,
+          @status,
+          @failure_reason,
+          @delivered_at,
+          COALESCE(@created_at, ${nowExpr()}),
+          ${nowExpr()}
+        )
+        ON CONFLICT(id) DO UPDATE SET
+          sender_user_id = excluded.sender_user_id,
+          sender_endpoint = excluded.sender_endpoint,
+          sender_real_e164 = excluded.sender_real_e164,
+          target_endpoint = excluded.target_endpoint,
+          target_e164 = excluded.target_e164,
+          selected_virtual_e164 = excluded.selected_virtual_e164,
+          content_type = excluded.content_type,
+          body = excluded.body,
+          body_bytes = excluded.body_bytes,
+          status = excluded.status,
+          failure_reason = excluded.failure_reason,
+          delivered_at = COALESCE(excluded.delivered_at, messages.delivered_at),
+          updated_at = ${nowExpr()}
+      `),
+      getMessageById: this.db.prepare('SELECT * FROM messages WHERE id = ? LIMIT 1'),
+      listMessages: this.db.prepare(`
+        SELECT
+          id,
+          sender_user_id,
+          sender_endpoint,
+          sender_real_e164,
+          target_endpoint,
+          target_e164,
+          selected_virtual_e164,
+          content_type,
+          body,
+          body_bytes,
+          status,
+          failure_reason,
+          created_at,
+          delivered_at,
+          updated_at
+        FROM messages
+        WHERE (@status IS NULL OR status = @status)
+          AND (
+            @since_sec IS NULL
+            OR created_at >= datetime('now', '-' || @since_sec || ' seconds')
+          )
+        ORDER BY created_at DESC, id DESC
+        LIMIT @limit
+      `),
+      getDashboardMessageStats: this.db.prepare(`
+        SELECT
+          COUNT(1) AS total_messages,
+          COALESCE(SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END), 0) AS delivered_messages,
+          COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed_messages,
+          COALESCE(SUM(CASE WHEN created_at >= datetime('now', '-1 day') THEN 1 ELSE 0 END), 0) AS messages_last_24h,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN status = 'failed' AND created_at >= datetime('now', '-1 day') THEN 1
+                ELSE 0
+              END
+            ),
+            0
+          ) AS failed_last_24h
+        FROM messages
+      `),
+      getRecentMessages: this.db.prepare(`
+        SELECT
+          id,
+          sender_user_id,
+          sender_endpoint,
+          sender_real_e164,
+          target_endpoint,
+          target_e164,
+          selected_virtual_e164,
+          content_type,
+          body,
+          body_bytes,
+          status,
+          failure_reason,
+          created_at,
+          delivered_at
+        FROM messages
+        ORDER BY created_at DESC, id DESC
         LIMIT ?
       `),
       insertOpsAuditEvent: this.db.prepare(`
@@ -295,6 +409,7 @@ class DatabaseService {
   getDashboardSummary() {
     const calls = this.stmts.getDashboardCallStats.get(...ACTIVE_CALL_STATUSES);
     const calls24h = this.stmts.getDashboard24hStats.get();
+    const messages = this.stmts.getDashboardMessageStats.get();
     const users = this.stmts.getDashboardUserStats.get();
     const virtualNumbers = this.stmts.getDashboardVirtualStats.get();
 
@@ -306,6 +421,13 @@ class DatabaseService {
         failed: calls.failed_calls,
         last_24h: calls24h.calls_last_24h,
         failed_last_24h: calls24h.failed_last_24h
+      },
+      messages: {
+        total: messages.total_messages,
+        delivered: messages.delivered_messages,
+        failed: messages.failed_messages,
+        last_24h: messages.messages_last_24h,
+        failed_last_24h: messages.failed_last_24h
       },
       users: {
         total: users.total_users,
@@ -330,6 +452,108 @@ class DatabaseService {
       created_at: row.created_at,
       ended_at: row.ended_at,
       failure_reason: row.failure_reason
+    }));
+  }
+
+  upsertMessageEvent(messageEvent) {
+    this.stmts.upsertMessage.run({
+      id: String(messageEvent.id || '').trim(),
+      sender_user_id: String(messageEvent.sender_user_id || '').trim(),
+      sender_endpoint: String(messageEvent.sender_endpoint || '').trim(),
+      sender_real_e164: String(messageEvent.sender_real_e164 || '').trim(),
+      target_endpoint: String(messageEvent.target_endpoint || '').trim(),
+      target_e164: String(messageEvent.target_e164 || '').trim(),
+      selected_virtual_e164: String(messageEvent.selected_virtual_e164 || '').trim(),
+      content_type: String(messageEvent.content_type || 'text/plain').trim(),
+      body: String(messageEvent.body || ''),
+      body_bytes: Number.isFinite(Number(messageEvent.body_bytes))
+        ? Number(messageEvent.body_bytes)
+        : Buffer.byteLength(String(messageEvent.body || ''), 'utf8'),
+      status: String(messageEvent.status || 'created').trim().toLowerCase(),
+      failure_reason: messageEvent.failure_reason ? String(messageEvent.failure_reason).trim() : null,
+      delivered_at: messageEvent.delivered_at || null,
+      created_at: messageEvent.created_at || null
+    });
+  }
+
+  getMessageById(messageId) {
+    const row = this.stmts.getMessageById.get(String(messageId || '').trim());
+    if (!row) {
+      return null;
+    }
+
+    return {
+      message_id: row.id,
+      sender_user_id: row.sender_user_id,
+      sender_endpoint: row.sender_endpoint,
+      sender_real_e164: row.sender_real_e164,
+      target_endpoint: row.target_endpoint,
+      target_e164: row.target_e164,
+      selected_virtual_e164: row.selected_virtual_e164,
+      content_type: row.content_type,
+      body: row.body,
+      body_bytes: row.body_bytes,
+      status: row.status,
+      failure_reason: row.failure_reason,
+      created_at: row.created_at,
+      delivered_at: row.delivered_at,
+      updated_at: row.updated_at
+    };
+  }
+
+  listMessages({
+    limit = 30,
+    status = null,
+    sinceSec = null
+  } = {}) {
+    const safeLimit = Math.max(1, Math.min(200, Number.parseInt(limit, 10) || 30));
+    const normalizedStatus = status && MESSAGE_STATUSES.includes(String(status).toLowerCase())
+      ? String(status).toLowerCase()
+      : null;
+    const safeSinceSec = Number.isFinite(Number(sinceSec)) && Number(sinceSec) > 0
+      ? Math.min(7 * 24 * 3600, Number.parseInt(sinceSec, 10))
+      : null;
+
+    return this.stmts.listMessages.all({
+      limit: safeLimit,
+      status: normalizedStatus,
+      since_sec: safeSinceSec
+    }).map((row) => ({
+      message_id: row.id,
+      sender_user_id: row.sender_user_id,
+      sender_endpoint: row.sender_endpoint,
+      sender_real_e164: row.sender_real_e164,
+      target_endpoint: row.target_endpoint,
+      target_e164: row.target_e164,
+      selected_virtual_e164: row.selected_virtual_e164,
+      content_type: row.content_type,
+      body: row.body,
+      body_bytes: row.body_bytes,
+      status: row.status,
+      failure_reason: row.failure_reason,
+      created_at: row.created_at,
+      delivered_at: row.delivered_at,
+      updated_at: row.updated_at
+    }));
+  }
+
+  getRecentMessages(limit = 10) {
+    const safeLimit = Math.max(1, Math.min(50, Number.parseInt(limit, 10) || 10));
+    return this.stmts.getRecentMessages.all(safeLimit).map((row) => ({
+      message_id: row.id,
+      sender_user_id: row.sender_user_id,
+      sender_endpoint: row.sender_endpoint,
+      sender_real_e164: row.sender_real_e164,
+      target_endpoint: row.target_endpoint,
+      target_e164: row.target_e164,
+      selected_virtual_e164: row.selected_virtual_e164,
+      content_type: row.content_type,
+      body: row.body,
+      body_bytes: row.body_bytes,
+      status: row.status,
+      failure_reason: row.failure_reason,
+      created_at: row.created_at,
+      delivered_at: row.delivered_at
     }));
   }
 
@@ -375,5 +599,6 @@ class DatabaseService {
 
 module.exports = {
   DatabaseService,
-  ACTIVE_CALL_STATUSES
+  ACTIVE_CALL_STATUSES,
+  MESSAGE_STATUSES
 };

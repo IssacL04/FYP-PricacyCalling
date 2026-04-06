@@ -6,6 +6,25 @@ const { AppError } = require('../src/utils/errors');
 
 function createDeps() {
   const auditStore = [];
+  const messageStore = [
+    {
+      message_id: 'msg-1',
+      sender_user_id: 'caller-1',
+      sender_endpoint: 'alice',
+      sender_real_e164: '+8613900000001',
+      target_endpoint: 'bob',
+      target_e164: '+8613900000002',
+      selected_virtual_e164: '+8613800011111',
+      content_type: 'text/plain',
+      body: 'hello',
+      body_bytes: 5,
+      status: 'delivered',
+      failure_reason: null,
+      created_at: new Date().toISOString(),
+      delivered_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+  ];
 
   const db = {
     healthCheck() {
@@ -14,12 +33,25 @@ function createDeps() {
     getDashboardSummary() {
       return {
         calls: { total: 0, active: 0, completed: 0, failed: 0, last_24h: 0, failed_last_24h: 0 },
+        messages: { total: 1, delivered: 1, failed: 0, last_24h: 1, failed_last_24h: 0 },
         users: { total: 0, enabled: 0 },
         virtual_numbers: { total: 0, enabled: 0 }
       };
     },
     getRecentCalls() {
       return [];
+    },
+    getRecentMessages() {
+      return messageStore.slice(0, 1);
+    },
+    listMessages({ status }) {
+      if (!status) {
+        return [...messageStore];
+      }
+      return messageStore.filter((item) => item.status === status);
+    },
+    getMessageById(id) {
+      return messageStore.find((item) => item.message_id === id) || null;
     },
     addOpsAuditEvent(payload) {
       auditStore.unshift({
@@ -256,4 +288,42 @@ test('ops logs route returns payload from log service', async () => {
   assert.equal(result.payload.entries.length, 1);
   assert.equal(result.payload.entries[0].level, 'warning');
   assert.equal(result.payload.query.services, 'asterisk');
+});
+
+test('message routes support list and detail query', async () => {
+  const { app } = createDeps();
+  const listHandler = getRouteHandler(app, 'get', '/v1/messages');
+  const detailHandler = getRouteHandler(app, 'get', '/v1/messages/:id');
+
+  const listResult = await invokeHandler(listHandler, {
+    query: {
+      limit: '10',
+      status: 'delivered'
+    }
+  });
+  assert.equal(listResult.status, 200);
+  assert.equal(listResult.payload.messages.length, 1);
+  assert.equal(listResult.payload.messages[0].message_id, 'msg-1');
+
+  const detailResult = await invokeHandler(detailHandler, {
+    params: {
+      id: 'msg-1'
+    }
+  });
+  assert.equal(detailResult.status, 200);
+  assert.equal(detailResult.payload.message_id, 'msg-1');
+});
+
+test('message list route rejects unsupported status filter', async () => {
+  const { app } = createDeps();
+  const listHandler = getRouteHandler(app, 'get', '/v1/messages');
+
+  await assert.rejects(
+    () => invokeHandler(listHandler, {
+      query: {
+        status: 'unknown_status'
+      }
+    }),
+    (error) => error && error.code === 'invalid_message_status'
+  );
 });

@@ -640,3 +640,64 @@ sudo asterisk -rx 'dialplan show select_virtual'
 sudo systemctl restart asterisk
 sudo systemctl restart privacy-calling-api
 ```
+
+---
+
+## 13. SIP MESSAGE 隐私文本验收（一期）
+
+### 13.1 部署前检查（模块）
+```bash
+sudo asterisk -rx 'module show like app_message'
+sudo asterisk -rx 'module show like res_pjsip_messaging'
+```
+
+预期：两个模块都能查询到（`Status: Running`）。
+
+### 13.2 下发配置并确认路由
+```bash
+cd /home/ubuntu/fyp/PrivacyCalling
+sudo ./scripts/deploy-asterisk-config.sh
+sudo ./scripts/sync-asterisk-astdb.sh
+sudo asterisk -rx 'dialplan show privacy_message_in'
+sudo asterisk -rx 'pjsip show endpoint alice'
+```
+
+预期：
+1. `privacy_message_in` context 存在
+2. endpoint 中有 `message_context = privacy_message_in`
+
+### 13.3 客户端互发文本（Alice -> Bob）
+1. 确认 Alice/Bob 已注册在线（`pjsip show contacts`）
+2. 在 Alice 软电话向 `bob` 或 `+8613900000002` 发送纯文本消息（`text/plain`）
+3. Bob 收到后，发件人应显示虚拟号而非 Alice 真实号
+
+### 13.4 API 查询消息终态
+```bash
+curl -H 'x-api-key: <你的API_KEY>' \
+  'http://127.0.0.1:8080/v1/messages?limit=20&since_sec=3600'
+
+curl -H 'x-api-key: <你的API_KEY>' \
+  'http://127.0.0.1:8080/v1/messages?status=failed&limit=20'
+
+curl -H 'x-api-key: <你的API_KEY>' \
+  'http://127.0.0.1:8080/v1/messages/<message_id>'
+```
+
+### 13.5 失败场景预期
+1. 接收方离线：`status=failed` 且 `failure_reason=target_offline`
+2. 非 `text/plain`：`status=failed` 且 `failure_reason=invalid_content_type`
+3. 空消息或超长（>1024）：`status=failed` 且 `failure_reason=empty_body/body_too_large`
+
+### 13.6 观测与排障
+```bash
+sudo asterisk -rvvv
+```
+
+CLI 中建议：
+```text
+core set verbose 5
+core set debug 3
+pjsip set logger on
+```
+
+你应能看到 `UserEvent: PrivacyMessageState` 的 `created/routing/delivered/failed` 全链路事件。
