@@ -1,0 +1,23 @@
+#!/bin/sh
+
+set -eu
+
+APP_HOME=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+TMP_DIR="$APP_HOME/.tmp"
+mkdir -p "$TMP_DIR"
+export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$APP_HOME/.gradle-home}"
+mkdir -p "$GRADLE_USER_HOME"
+
+if [ ! -f "$CLASSPATH" ]; then
+  echo "Missing gradle-wrapper.jar. Run 'gradle wrapper' in this directory to generate it."
+  exit 1
+fi
+
+if [ -n "${JAVA_HOME:-}" ]; then
+  JAVACMD="$JAVA_HOME/bin/java"
+else
+  JAVACMD=java
+fi
+
+exec "$JAVACMD" -Djava.io.tmpdir="$TMP_DIR" -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"
