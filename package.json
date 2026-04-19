@@ -13,7 +13,10 @@
     "bench:capacity": "node scripts/benchmark-capacity.js",
     "bench:matrix": "node scripts/benchmark-matrix.js",
     "chart:matrix": "node scripts/generate-matrix-charts.js",
-    "sip:loadbot": "node scripts/sip-loadbot.js"
+    "sip:loadbot": "node scripts/sip-loadbot.js",
+    "sim:predictive": "node scripts/simulate-predictive-scaling.js",
+    "chart:predictive": "node scripts/generate-predictive-scaling-charts.js",
+    "demo:predictive": "node scripts/demo-predictive-scaling.js"
   },
   "keywords": [
     "sip",

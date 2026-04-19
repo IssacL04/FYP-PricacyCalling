@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Predictive Scaling Charts</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; color: #1b2a41; background: #f6f9fc; }
+    h1 { margin-bottom: 8px; }
+    .meta { color: #415a77; margin-bottom: 20px; }
+    .card { background: #fff; border: 1px solid #d9e2ec; border-radius: 10px; padding: 12px; margin-bottom: 18px; }
+    img { width: 100%; max-width: 1080px; display: block; border: 1px solid #eef2f7; border-radius: 8px; }
+    .kpi { font-size: 15px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <h1>Predictive Scaling PoC Charts</h1>
+  <div class="meta">series source: /home/ubuntu/fyp/PrivacyCalling/data/predictive-1776567787891/series.json</div>
+  <div class="card kpi">
+    <div>Reactive create success rate: <b>0.9156</b></div>
+    <div>Predictive create success rate: <b>0.9227</b></div>
+    <div>Failure reduction: <b>8.41%</b></div>
+    <div>Blocking-minute reduction: <b>21</b></div>
+  </div>
+  <div class="card"><img src="./01-traffic-forecast.svg" alt="traffic forecast"></div>
+  <div class="card"><img src="./02-pool-scaling-compare.svg" alt="pool scaling"></div>
+  <div class="card"><img src="./03-blocking-compare.svg" alt="blocking compare"></div>
+  <div class="card"><img src="./04-cumulative-failures.svg" alt="cumulative failures"></div>
+  <div class="card"><a href="./summary.md">summary.md</a></div>
+</body>
+</html>

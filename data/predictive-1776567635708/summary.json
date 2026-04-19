@@ -1,0 +1,81 @@
+{
+  "generated_at": "2026-04-19T03:00:35.708Z",
+  "input": {
+    "duration_min": 360,
+    "step_min": 1,
+    "horizons": [
+      15,
+      30
+    ],
+    "policy_horizon_min": 15,
+    "online_users": 300,
+    "holding_min": 1.5,
+    "target_blocking": 0.1,
+    "min_pool": 10,
+    "max_pool": 60,
+    "initial_pool": 10,
+    "scale_up_delay_min": 10,
+    "scale_down_delay_min": 30,
+    "max_step_per_action": 8,
+    "downscale_threshold": 2,
+    "seed": 42,
+    "traffic": {
+      "baseline_attempts": 6,
+      "tidal_amplitude": 14,
+      "peak_amplitude": 16,
+      "peak_width_min": 22,
+      "noise_sigma": 0.9,
+      "period_min": 180
+    }
+  },
+  "config": {
+    "step_min": 1,
+    "horizons_min": [
+      15,
+      30
+    ],
+    "policy_horizon_min": 15,
+    "online_users": 300,
+    "holding_min": 1.5,
+    "target_blocking": 0.1,
+    "min_pool": 10,
+    "max_pool": 60,
+    "initial_pool": 10,
+    "scale_up_delay_min": 10,
+    "scale_down_delay_min": 30,
+    "max_step_per_action": 8,
+    "downscale_threshold": 2
+  },
+  "reactive": {
+    "total_attempts": 6434.096,
+    "total_failures": 542.844,
+    "total_successes": 5891.253,
+    "create_success_rate": 0.91563,
+    "avg_pool": 30.669,
+    "peak_pool": 35,
+    "avg_blocking": 0.077406,
+    "peak_blocking": 0.620431,
+    "blocking_minutes": 81
+  },
+  "predictive": {
+    "total_attempts": 6434.096,
+    "total_failures": 497.21,
+    "total_successes": 5936.887,
+    "create_success_rate": 0.922723,
+    "avg_pool": 30.936,
+    "peak_pool": 34,
+    "avg_blocking": 0.071528,
+    "peak_blocking": 0.620431,
+    "blocking_minutes": 60
+  },
+  "failure_reduction_pct": 8.4065,
+  "blocking_minutes_reduction": 21,
+  "avg_pool": {
+    "reactive": 30.669,
+    "predictive": 30.936
+  },
+  "peak_pool": {
+    "reactive": 35,
+    "predictive": 34
+  }
+}

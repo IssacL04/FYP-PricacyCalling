@@ -1,0 +1,383 @@
+\documentclass[12pt,a4paper]{report}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{svg}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{siunitx}
+
+\title{ChatCatHat\texttrademark: Chapter 5 Results and Evaluation}
+\author{Privacy Calling Project}
+\date{April 10, 2026}
+
+% If your charts are moved to ../data/matrix/charts, update this macro.
+\newcommand{\MatrixChartsDir}{../data/matrix-1775300745300/charts}
+\newcommand{\PredictiveChartsDir}{../data/predictive-1776567787891/charts}
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+\setcounter{chapter}{4}
+\chapter{RESULTS AND EVALUATION}
+\label{chap:results-evaluation}
+
+\section{Evaluation Objectives and Methodology}
+\label{sec:eval-objectives}
+This chapter evaluates ChatCatHat\texttrademark\ from three aspects: functional correctness, stress behavior under rising pressure, and bottleneck localization using runtime telemetry.
+
+The evaluation data was generated from the repository benchmark workflow:
+\begin{itemize}
+  \item \texttt{scripts/benchmark-matrix.js}
+  \item \texttt{scripts/benchmark-capacity.js}
+  \item \texttt{scripts/generate-matrix-charts.js}
+\end{itemize}
+
+The analyzed stress dataset is:
+\begin{itemize}
+  \item \texttt{data/matrix-1775300745300/matrix-runs.json}
+  \item \texttt{data/matrix-1775300745300/matrix-rows.csv}
+  \item \texttt{data/matrix-1775300745300/matrix-aggregate.json}
+  \item \texttt{data/matrix-1775300745300/charts/*}
+\end{itemize}
+
+The matrix benchmark uses:
+\begin{itemize}
+  \item virtual pool sizes \(V \in \{10,20,30\}\)
+  \item online users \(U \in \{20,40,60,80,100\}\)
+  \item repeats per point \(R=2\)
+  \item calls per user \(=2\), max parallel \(=30\)
+  \item call timeout \(=25\) s, poll interval \(=1000\) ms
+  \item minimum stage duration \(=8000\) ms, cooldown \(=1500\) ms
+\end{itemize}
+
+The benchmark window was generated between 2026-04-04T11:06:32Z and 2026-04-04T11:10:31Z.
+Across all points and repeats, the total planned calls were 3600.
+
+The core metrics follow the same definitions used in the scripts:
+\begin{equation}
+\text{CreateSuccessRate}=\frac{\text{create\_success}}{\text{create\_success}+\text{create\_failed}}
+\end{equation}
+\begin{equation}
+\text{TerminalCompletedRate}=\frac{\text{terminal\_completed}}{\text{terminal\_completed}+\text{terminal\_failed}+\text{terminal\_timeout}}
+\end{equation}
+
+\section{Functional Correctness Verification}
+\label{sec:functional-correctness}
+Automated verification was executed on April 10, 2026 with \texttt{npm test}. The result snapshot is shown in Table~\ref{tab:test-summary}.
+
+\begin{table}[H]
+\centering
+\caption{Automated test result snapshot.}
+\label{tab:test-summary}
+\begin{tabular}{lc}
+\toprule
+Item & Value \\
+\midrule
+Total test files & 15 \\
+Passed & 15 \\
+Failed & 0 \\
+Cancelled/Skipped/Todo & 0 \\
+Total duration & 949.84 ms \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The passed tests cover API routing, call service behavior, state machine transitions, identity policy, database persistence, capacity model functions, authentication flow, and operations metrics/service management. This confirms that the measured stress behavior is based on a functionally consistent code baseline.
+
+\section{Matrix Stress Test Results}
+\label{sec:matrix-results}
+
+\subsection{Overall Outcome}
+\label{subsec:overall-outcome}
+From the 3600 planned calls:
+\begin{itemize}
+  \item 617 were created successfully and 2983 failed at create stage
+  \item create success ratio over all requests: \(617/3600=0.1714\)
+  \item among created calls, terminal results were 577 completed and 40 failed
+  \item terminal completed ratio over created calls: \(577/(577+40)=0.9352\)
+\end{itemize}
+
+The sampled create failure reasons in \texttt{matrix-runs.json} are consistently \texttt{No available virtual number in pool}, matching the policy behavior in \texttt{src/policy/consistent-callee-policy.js} when no fallback virtual number exists.
+
+\subsection{Create Success and Completion Trends}
+\label{subsec:success-trends}
+Table~\ref{tab:virtual-summary} summarizes the average trend by virtual pool size and Figure~\ref{fig:create-success-line} to Figure~\ref{fig:marginal-gain} visualize the pressure behavior.
+
+\begin{table}[H]
+\centering
+\caption{Average results by virtual pool size (from \texttt{charts/summary.md}).}
+\label{tab:virtual-summary}
+\begin{tabular}{lccc}
+\toprule
+Virtual Count & Avg Create Success Rate & Avg Terminal Completed Rate & Avg Peak RSS (MB) \\
+\midrule
+10 & 0.0996 & 0.9689 & 74.00 \\
+20 & 0.2277 & 0.9386 & 71.97 \\
+30 & 0.3706 & 0.9320 & 64.67 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includesvg[width=0.95\linewidth]{\MatrixChartsDir/01-create-success-rate}
+\caption{Create success rate vs online users under different virtual pool sizes.}
+\label{fig:create-success-line}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includesvg[width=0.95\linewidth]{\MatrixChartsDir/02-terminal-completed-rate}
+\caption{Terminal completed rate vs online users under different virtual pool sizes.}
+\label{fig:terminal-completed-line}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includesvg[width=0.95\linewidth]{\MatrixChartsDir/06-create-success-heatmap}
+\caption{Create success heatmap (rows: virtual pool size, columns: online users).}
+\label{fig:create-heatmap}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includesvg[width=0.95\linewidth]{\MatrixChartsDir/08-marginal-gain-virtual-pool}
+\caption{Marginal create-success gain when increasing virtual pool size.}
+\label{fig:marginal-gain}
+\end{figure}
+
+Key observations are:
+\begin{itemize}
+  \item Create success rate decreases with user pressure for all virtual pool sizes.
+  \item Expanding virtual pool from 10 to 30 significantly improves create success across all user stages.
+  \item At 100 users, create success rises from 0.0450 (virtual 10) to 0.1625 (virtual 30), a gain of 0.1175 absolute.
+  \item Terminal completed rate remains relatively high (\(\ge 0.8765\)) after call creation, indicating the dominant bottleneck is in front-stage call creation, not post-creation lifecycle completion.
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\caption{Marginal gain in create success rate when expanding virtual pool.}
+\label{tab:marginal-gains}
+\begin{tabular}{cccc}
+\toprule
+Online Users & Gain 10\(\rightarrow\)20 & Gain 20\(\rightarrow\)30 & Gain 10\(\rightarrow\)30 \\
+\midrule
+20 & 0.2875 & 0.3000 & 0.5875 \\
+40 & 0.1250 & 0.1375 & 0.2625 \\
+60 & 0.0917 & 0.1208 & 0.2125 \\
+80 & 0.0813 & 0.0937 & 0.1750 \\
+100 & 0.0550 & 0.0625 & 0.1175 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:marginal-gains} and Figure~\ref{fig:marginal-gain} show diminishing marginal gain as pressure rises. This suggests that increasing virtual pool size is effective but should be combined with additional scheduling or queueing policies for higher load ranges.
+
+\subsection{Latency Stability}
+\label{subsec:latency-stability}
+Latency metrics are stable in settle and lifecycle dimensions:
+\begin{itemize}
+  \item settle P95 range: 2008.5 ms to 2033.0 ms
+  \item lifecycle P95 range: 1476.0 ms to 1501.5 ms
+\end{itemize}
+
+Create P95 varies more (71.0 ms to 280.0 ms), reflecting increased contention before a call is accepted into the active path.
+
+\begin{table}[H]
+\centering
+\caption{Latency and terminal quality envelope (matrix aggregate).}
+\label{tab:latency-envelope}
+\begin{tabular}{lcc}
+\toprule
+Metric & Minimum & Maximum \\
+\midrule
+Create P95 (ms) & 71.0 & 280.0 \\
+Settle P95 (ms) & 2008.5 & 2033.0 \\
+Lifecycle P95 (ms) & 1476.0 & 1501.5 \\
+Terminal Completed Rate & 0.8765 & 1.0000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Resource Usage and Bottleneck Localization}
+\label{subsec:resource-bottleneck}
+Resource telemetry indicates the system is not CPU-saturated in this test range:
+\begin{itemize}
+  \item peak load/core range: 0.0188 to 0.0688
+  \item peak RSS range: 57.29 MB to 76.21 MB
+  \item peak heap usage ratio range: 0.6118 to 0.9183
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includesvg[width=0.95\linewidth]{\MatrixChartsDir/05-server-load-vs-pressure}
+\caption{Server load/core vs pressure.}
+\label{fig:server-load-line}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includesvg[width=0.95\linewidth]{\MatrixChartsDir/03-server-rss-vs-pressure}
+\caption{Server peak RSS vs pressure.}
+\label{fig:server-rss-line}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includesvg[width=0.95\linewidth]{\MatrixChartsDir/09-server-load-heatmap}
+\caption{Server load/core heatmap.}
+\label{fig:server-load-heatmap}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includesvg[width=0.95\linewidth]{\MatrixChartsDir/10-server-rss-heatmap}
+\caption{Server RSS heatmap.}
+\label{fig:server-rss-heatmap}
+\end{figure}
+
+Combined with the sampled failure reason \texttt{No available virtual number in pool}, these measurements show that virtual identity supply and admission policy are the first-order bottlenecks in this dataset, while host CPU and memory remain within safe operational bounds.
+
+\section{AI-Driven Predictive Scaling PoC Evaluation}
+\label{sec:predictive-scaling-poc}
+To evaluate proactive scheduling, a lightweight Node.js predictive-scaling PoC was introduced:
+\begin{itemize}
+  \item Holt/EWMA-based traffic forecasting for 15 and 30 minute horizons
+  \item Engset-based pool sizing to keep blocking probability under a target threshold
+  \item policy comparison under identical synthetic tidal traffic:
+  \begin{itemize}
+    \item \textbf{Reactive}: scale based on current load only
+    \item \textbf{Predictive}: pre-warm pool from short-horizon forecast signal
+  \end{itemize}
+\end{itemize}
+
+The generated dataset is:
+\begin{itemize}
+  \item \texttt{data/predictive-1776567787891/series.json}
+  \item \texttt{data/predictive-1776567787891/series.csv}
+  \item \texttt{data/predictive-1776567787891/summary.json}
+  \item \texttt{data/predictive-1776567787891/charts/*}
+\end{itemize}
+
+Default PoC settings were: duration \(=360\) min, step \(=1\) min, horizons \(=\{15,30\}\), \(N=300\), hold time \(=1.5\) min, target blocking \(=0.10\), pool bounds \([10,60]\), scale-up delay \(=10\) min, scale-down delay \(=30\) min, and seed \(=42\).
+
+Table~\ref{tab:predictive-summary} summarizes the policy-level KPI.
+
+\begin{table}[H]
+\centering
+\caption{Reactive vs predictive scaling KPI summary (\texttt{summary.json}).}
+\label{tab:predictive-summary}
+\begin{tabular}{lcc}
+\toprule
+Metric & Reactive & Predictive \\
+\midrule
+Create Success Rate & 0.9156 & 0.9227 \\
+Total Create Failures & 542.84 & 497.21 \\
+Average Virtual Pool & 30.67 & 30.94 \\
+Peak Virtual Pool & 35.00 & 34.00 \\
+Blocking Minutes (\(P_b>0.10\)) & 81 & 60 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Derived gains from the same run:
+\begin{itemize}
+  \item failure reduction: \(8.41\%\)
+  \item blocking-minute reduction: \(21\) minutes
+  \item peak pool did not increase (\(35 \rightarrow 34\))
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includesvg[width=0.95\linewidth]{\PredictiveChartsDir/01-traffic-forecast}
+\caption{Synthetic tidal traffic with 15/30-minute forecast curves.}
+\label{fig:predictive-traffic-forecast}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includesvg[width=0.95\linewidth]{\PredictiveChartsDir/02-pool-scaling-compare}
+\caption{Virtual pool scaling paths: reactive vs predictive pre-warming.}
+\label{fig:predictive-pool-compare}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includesvg[width=0.95\linewidth]{\PredictiveChartsDir/03-blocking-compare}
+\caption{Blocking probability comparison over time.}
+\label{fig:predictive-blocking-compare}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includesvg[width=0.95\linewidth]{\PredictiveChartsDir/04-cumulative-failures}
+\caption{Cumulative create failures under reactive and predictive policies.}
+\label{fig:predictive-cumulative-failures}
+\end{figure}
+
+These results indicate that short-horizon predictive pre-warming can reduce create-stage loss with minimal additional average pool usage, supporting the feasibility of an AI-driven proactive scaling path before introducing heavier online ML services.
+
+\subsection{Full Aggregate Matrix}
+\label{subsec:full-matrix}
+Table~\ref{tab:matrix-aggregate-full} lists the full aggregate matrix for reproducibility.
+
+\begin{table}[H]
+\centering
+\caption{Matrix stress test aggregate results (2 repeats per point).}
+\label{tab:matrix-aggregate-full}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{cccccccc}
+\toprule
+Virtual & Users & Planned Calls & Create Rate & Terminal Completed Rate & Create P95 (ms) & Settle P95 (ms) & Peak RSS (MB)\\
+\midrule
+10 & 20 & 40 & 0.2250 & 1.0000 & 125.5 & 2012.0 & 76.21\\
+10 & 40 & 80 & 0.1000 & 1.0000 & 83.0 & 2011.5 & 72.64\\
+10 & 60 & 120 & 0.0750 & 0.9000 & 71.0 & 2014.0 & 73.68\\
+10 & 80 & 160 & 0.0531 & 0.9444 & 99.5 & 2011.0 & 73.61\\
+10 & 100 & 200 & 0.0450 & 1.0000 & 98.5 & 2008.5 & 73.85\\
+20 & 20 & 40 & 0.5125 & 0.9055 & 164.0 & 2021.0 & 69.50\\
+20 & 40 & 80 & 0.2250 & 1.0000 & 174.0 & 2027.5 & 71.57\\
+20 & 60 & 120 & 0.1667 & 0.9318 & 147.5 & 2019.0 & 72.17\\
+20 & 80 & 160 & 0.1344 & 0.9307 & 225.5 & 2028.5 & 72.58\\
+20 & 100 & 200 & 0.1000 & 0.9250 & 152.5 & 2021.0 & 74.05\\
+30 & 20 & 40 & 0.8125 & 0.9236 & 206.5 & 2033.0 & 74.82\\
+30 & 40 & 80 & 0.3625 & 0.9828 & 207.5 & 2030.5 & 57.29\\
+30 & 60 & 120 & 0.2875 & 0.9500 & 220.0 & 2028.0 & 61.30\\
+30 & 80 & 160 & 0.2281 & 0.8765 & 280.0 & 2022.5 & 63.11\\
+30 & 100 & 200 & 0.1625 & 0.9272 & 201.5 & 2024.0 & 66.83\\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\section{Threats to Validity}
+\label{sec:threats-validity}
+The following limitations should be considered:
+\begin{itemize}
+  \item The benchmark runs on a single host (\texttt{127.0.0.1}) and does not include WAN jitter/loss.
+  \item Each matrix point uses two repeats; higher repeat counts would reduce variance.
+  \item Simulated always-online SIP endpoints reduce uncertainty in registration behavior compared to uncontrolled real-user conditions.
+  \item Resource measurements are sampled every 2 seconds, so very short spikes may be under-represented.
+\end{itemize}
+
+\section{Chapter Summary}
+\label{sec:chapter-summary}
+The evaluation confirms that ChatCatHat\texttrademark\ is functionally correct on the tested code baseline and that the primary pressure bottleneck is virtual-number admission rather than host CPU saturation.
+
+Under the evaluated matrix:
+\begin{itemize}
+  \item Larger virtual pools consistently improve create-stage success.
+  \item Post-creation terminal completion remains high, indicating stable downstream call lifecycle handling.
+  \item Runtime resource levels stay moderate, supporting further scaling work on policy and pool management before infrastructure scaling.
+  \item Predictive pre-warming in PoC simulation further improves create-stage success and reduces blocking duration under tidal traffic.
+\end{itemize}
+
+\vspace{0.5em}
+\noindent
+\textbf{Compilation note:} this document uses \texttt{\textbackslash includesvg}. Compile with \texttt{-shell-escape}, or convert the SVG charts in \texttt{\MatrixChartsDir} to PDF and replace with \texttt{\textbackslash includegraphics}.
+
+\end{document}
