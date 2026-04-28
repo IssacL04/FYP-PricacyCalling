@@ -13,6 +13,7 @@ const { CallStateMachine } = require('./services/call-state-machine');
 const { CallService } = require('./services/call-service');
 const { SystemServiceManager } = require('./services/system-service-manager');
 const { OpsLogService } = require('./services/ops-log-service');
+const { LlmDiagnosticsService } = require('./services/llm-diagnostics-service');
 const { createApp } = require('./app');
 
 async function main() {
@@ -127,6 +128,8 @@ async function main() {
     asteriskFullPath: config.ops.logs.asteriskFullPath
   });
 
+  const llmDiagnosticsService = new LlmDiagnosticsService(config.llm);
+
   const app = createApp({
     authProvider,
     blockchainAuthService,
@@ -135,6 +138,7 @@ async function main() {
     amiClient,
     opsManager,
     opsLogService,
+    llmDiagnosticsService,
     config
   });
   const server = app.listen(config.app.port, config.app.host, () => {

@@ -96,6 +96,19 @@
         <div id="alertsList" class="alerts-list"></div>
       </section>
 
+      <section class="card ai-card animate-in" style="--delay: 108ms">
+        <div class="section-head">
+          <div>
+            <h2>AI 服务诊断</h2>
+            <p id="aiDiagnosticsMeta" class="muted">点击按钮后自动读取系统概览、告警、日志和审计记录。</p>
+          </div>
+          <button id="aiDiagnosticsBtn" class="btn filled" type="button">AI 诊断</button>
+        </div>
+        <div id="aiDiagnosticsResult" class="ai-diagnostics-result">
+          <p class="muted">尚未运行诊断。模型会判断整体服务状态，并在发现报错时给出服务器 shell 排查命令。</p>
+        </div>
+      </section>
+
       <section class="card load-card animate-in" style="--delay: 120ms">
         <div class="section-head">
           <h2>服务器负载曲线（10 分钟）</h2>

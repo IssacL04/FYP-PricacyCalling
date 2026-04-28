@@ -138,6 +138,38 @@ function createDeps() {
         };
       }
     },
+    llmDiagnosticsService: {
+      async analyze(snapshot) {
+        return {
+          generated_at: new Date().toISOString(),
+          analyzer: {
+            enabled: true,
+            configured: true,
+            provider: 'test',
+            model: 'test-model',
+            timeout_ms: 1000
+          },
+          diagnosis: {
+            overall_status: snapshot.precheck.overall_status,
+            confidence: 'high',
+            summary: '测试诊断完成',
+            key_findings: [],
+            suspected_causes: [],
+            recommended_shell_commands: [
+              {
+                command: 'systemctl status asterisk privacy-calling-api --no-pager',
+                purpose: '查看服务状态',
+                requires_sudo: false,
+                safe_to_run: true
+              }
+            ],
+            next_steps: []
+          },
+          usage: null,
+          raw_response_parseable: true
+        };
+      }
+    },
     config: {
       ops: {
         dashboardEnabled: true,
@@ -147,6 +179,14 @@ function createDeps() {
           heapUsage: { warn: 0.75, error: 0.9 },
           activeCalls: { warn: 30, error: 50 }
         }
+      },
+      llm: {
+        enabled: true,
+        provider: 'test',
+        apiKey: 'test-key',
+        model: 'test-model',
+        diagnosticLogLimit: 120,
+        diagnosticLogSinceSec: 900
       }
     }
   };
@@ -288,6 +328,31 @@ test('ops logs route returns payload from log service', async () => {
   assert.equal(result.payload.entries.length, 1);
   assert.equal(result.payload.entries[0].level, 'warning');
   assert.equal(result.payload.query.services, 'asterisk');
+});
+
+test('ops diagnostics route calls LLM service and writes audit record', async () => {
+  const { app, auditStore } = createDeps();
+  const diagnosticsHandler = getRouteHandler(app, 'post', '/v1/ops/diagnostics');
+
+  const result = await invokeHandler(diagnosticsHandler, {
+    body: {
+      services: ['asterisk', 'privacy-calling-api'],
+      levels: ['warning', 'error'],
+      since_sec: 300,
+      log_limit: 20
+    }
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.payload.status, 'ok');
+  assert.equal(result.payload.diagnosis.summary, '测试诊断完成');
+  assert.equal(result.payload.precheck.overall_status, 'degraded');
+  assert.equal(result.payload.diagnosis.recommended_shell_commands.length, 1);
+
+  assert.equal(auditStore.length, 1);
+  assert.equal(auditStore[0].action, 'ai_diagnostics_requested');
+  assert.equal(auditStore[0].result, 'success');
+  assert.equal(auditStore[0].details.overall_status, 'degraded');
 });
 
 test('message routes support list and detail query', async () => {

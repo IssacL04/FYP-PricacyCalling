@@ -114,6 +114,18 @@ function loadConfig() {
           error: toInt(process.env.OPS_ALERT_ACTIVE_CALLS_ERROR, 50)
         }
       }
+    },
+    llm: {
+      enabled: toBool(process.env.LLM_ENABLED, true),
+      provider: process.env.LLM_PROVIDER || 'openai-compatible',
+      apiKey: process.env.LLM_API_KEY || '',
+      baseUrl: process.env.LLM_BASE_URL || 'https://api.openai.com/v1',
+      model: process.env.LLM_MODEL || '',
+      timeoutMs: toInt(process.env.LLM_TIMEOUT_MS, 30000),
+      temperature: toNumber(process.env.LLM_TEMPERATURE, 0.2),
+      maxTokens: toInt(process.env.LLM_MAX_TOKENS, 1600),
+      diagnosticLogLimit: toInt(process.env.LLM_DIAGNOSTIC_LOG_LIMIT, 120),
+      diagnosticLogSinceSec: toInt(process.env.LLM_DIAGNOSTIC_LOG_SINCE_SEC, 900)
     }
   };
 }

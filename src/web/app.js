@@ -19,6 +19,8 @@ const state = {
   availableLogServices: ['privacy-calling-api', 'asterisk', 'asterisk-full'],
   selectedLogServices: ['privacy-calling-api', 'asterisk', 'asterisk-full'],
   selectedLogLevels: ['debug', 'info', 'warning', 'error'],
+  aiDiagnosticsInFlight: false,
+  aiDiagnostics: null,
   auditEvents: []
 };
 
@@ -44,6 +46,9 @@ const els = {
   loadValue: document.getElementById('loadValue'),
   alertsCount: document.getElementById('alertsCount'),
   alertsList: document.getElementById('alertsList'),
+  aiDiagnosticsBtn: document.getElementById('aiDiagnosticsBtn'),
+  aiDiagnosticsMeta: document.getElementById('aiDiagnosticsMeta'),
+  aiDiagnosticsResult: document.getElementById('aiDiagnosticsResult'),
   chartMeta: document.getElementById('chartMeta'),
   lineLoad: document.getElementById('lineLoad'),
   lineHeap: document.getElementById('lineHeap'),
@@ -365,6 +370,155 @@ function renderAlerts(alerts) {
     node.append(title, meta);
     els.alertsList.appendChild(node);
   });
+}
+
+function getStatusLabel(status) {
+  if (status === 'healthy') {
+    return '健康';
+  }
+  if (status === 'degraded') {
+    return '降级';
+  }
+  if (status === 'critical') {
+    return '严重';
+  }
+  return '未知';
+}
+
+function getStatusBadgeLevel(status) {
+  if (status === 'healthy') {
+    return 'ok';
+  }
+  if (status === 'degraded') {
+    return 'warn';
+  }
+  return 'err';
+}
+
+function appendTextList(parent, titleText, items) {
+  const list = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (list.length === 0) {
+    return;
+  }
+
+  const title = document.createElement('h3');
+  title.textContent = titleText;
+
+  const ul = document.createElement('ul');
+  ul.className = 'ai-list';
+  list.forEach((item) => {
+    const li = document.createElement('li');
+    li.textContent = item;
+    ul.appendChild(li);
+  });
+
+  parent.append(title, ul);
+}
+
+function renderAiDiagnostics(payload) {
+  if (!els.aiDiagnosticsResult) {
+    return;
+  }
+
+  els.aiDiagnosticsResult.innerHTML = '';
+
+  if (!payload || !payload.diagnosis) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = '尚未运行诊断。模型会判断整体服务状态，并在发现报错时给出服务器 shell 排查命令。';
+    els.aiDiagnosticsResult.appendChild(empty);
+    if (els.aiDiagnosticsMeta) {
+      els.aiDiagnosticsMeta.textContent = '等待 AI 诊断...';
+    }
+    return;
+  }
+
+  const diagnosis = payload.diagnosis;
+  const header = document.createElement('div');
+  header.className = 'ai-diagnostics-header';
+
+  const badge = document.createElement('span');
+  badge.className = 'badge';
+  setBadge(
+    badge,
+    `${getStatusLabel(diagnosis.overall_status)} / ${diagnosis.confidence || 'medium'}`,
+    getStatusBadgeLevel(diagnosis.overall_status)
+  );
+
+  const summary = document.createElement('p');
+  summary.className = 'ai-summary';
+  summary.textContent = diagnosis.summary || '-';
+
+  header.append(badge, summary);
+  els.aiDiagnosticsResult.appendChild(header);
+
+  const findings = Array.isArray(diagnosis.key_findings) ? diagnosis.key_findings : [];
+  if (findings.length > 0) {
+    const findingTitle = document.createElement('h3');
+    findingTitle.textContent = '关键发现';
+    const list = document.createElement('div');
+    list.className = 'ai-findings';
+
+    findings.forEach((finding) => {
+      const item = document.createElement('article');
+      item.className = `ai-finding ${finding.level || 'info'}`;
+
+      const title = document.createElement('strong');
+      title.textContent = finding.title || finding.level || '发现';
+
+      const detail = document.createElement('p');
+      detail.textContent = finding.detail || '-';
+
+      item.append(title, detail);
+      if (finding.evidence) {
+        const evidence = document.createElement('small');
+        evidence.textContent = `证据：${finding.evidence}`;
+        item.appendChild(evidence);
+      }
+
+      list.appendChild(item);
+    });
+
+    els.aiDiagnosticsResult.append(findingTitle, list);
+  }
+
+  appendTextList(els.aiDiagnosticsResult, '可能原因', diagnosis.suspected_causes);
+
+  const commands = Array.isArray(diagnosis.recommended_shell_commands)
+    ? diagnosis.recommended_shell_commands
+    : [];
+  if (commands.length > 0) {
+    const commandTitle = document.createElement('h3');
+    commandTitle.textContent = '建议在服务器 Shell 输入的排查命令';
+    const commandList = document.createElement('div');
+    commandList.className = 'command-list';
+
+    commands.forEach((item) => {
+      const card = document.createElement('article');
+      card.className = 'command-card';
+
+      const code = document.createElement('code');
+      code.textContent = item.command || '';
+
+      const purpose = document.createElement('p');
+      purpose.textContent = item.purpose || '排查相关状态';
+
+      const meta = document.createElement('small');
+      meta.textContent = `${item.requires_sudo ? '需要 sudo' : '无需 sudo'} / ${item.safe_to_run === false ? '运行前请确认影响' : '只读排查命令'}`;
+
+      card.append(code, purpose, meta);
+      commandList.appendChild(card);
+    });
+
+    els.aiDiagnosticsResult.append(commandTitle, commandList);
+  }
+
+  appendTextList(els.aiDiagnosticsResult, '下一步建议', diagnosis.next_steps);
+
+  if (els.aiDiagnosticsMeta) {
+    const analyzer = payload.analyzer || {};
+    els.aiDiagnosticsMeta.textContent = `最近诊断：${formatTimestamp(payload.generated_at)} / ${analyzer.model || 'LLM'} / 预检=${payload.precheck ? getStatusLabel(payload.precheck.overall_status) : '-'}`;
+  }
 }
 
 function renderOverview(data) {
@@ -838,6 +992,48 @@ async function handleServiceAction(serviceName, action) {
   }
 }
 
+async function runAiDiagnostics() {
+  if (state.aiDiagnosticsInFlight) {
+    return;
+  }
+
+  state.aiDiagnosticsInFlight = true;
+  if (els.aiDiagnosticsBtn) {
+    els.aiDiagnosticsBtn.disabled = true;
+    els.aiDiagnosticsBtn.textContent = '诊断中...';
+  }
+  if (els.aiDiagnosticsMeta) {
+    els.aiDiagnosticsMeta.textContent = '正在收集系统概览、日志和审计记录，并调用大语言模型分析...';
+  }
+
+  try {
+    const payload = await request('/v1/ops/diagnostics', {
+      method: 'POST',
+      body: {
+        services: state.selectedLogServices,
+        levels: ['warning', 'error'],
+        since_sec: 900,
+        log_limit: 120
+      }
+    });
+    state.aiDiagnostics = payload;
+    renderAiDiagnostics(payload);
+    showToast('AI 诊断完成');
+    await refreshAuditEvents();
+  } catch (error) {
+    if (els.aiDiagnosticsMeta) {
+      els.aiDiagnosticsMeta.textContent = `AI 诊断失败：${error.message}`;
+    }
+    showToast(`AI 诊断失败: ${error.message}`);
+  } finally {
+    state.aiDiagnosticsInFlight = false;
+    if (els.aiDiagnosticsBtn) {
+      els.aiDiagnosticsBtn.disabled = false;
+      els.aiDiagnosticsBtn.textContent = 'AI 诊断';
+    }
+  }
+}
+
 function updateTailButton() {
   if (state.logsTailEnabled) {
     els.logsTailBtn.textContent = '暂停追尾';
@@ -979,6 +1175,7 @@ function init() {
   renderLogLevelFilters();
   updateTailButton();
   renderLogs();
+  renderAiDiagnostics(null);
   renderLoadChart();
   renderAuditEvents();
 
@@ -1003,6 +1200,10 @@ function init() {
   }
 
   els.refreshBtn.addEventListener('click', () => runRefreshCycle({ manual: true }));
+
+  if (els.aiDiagnosticsBtn) {
+    els.aiDiagnosticsBtn.addEventListener('click', runAiDiagnostics);
+  }
 
   els.logsKeywordInput.addEventListener('input', () => {
     state.logsKeyword = els.logsKeywordInput.value.trim();

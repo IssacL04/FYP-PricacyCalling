@@ -1,122 +1,330 @@
-# Runbook（从零到第一通 SIP 测试电话）
+# Privacy Calling Operations Runbook
 
-本文档用于你当前这个项目的 V1 验收：`Asterisk + Node.js API + SQLite`。
+Chinese copy: `docs/Runbook.zh-CN.md`
 
-## 0. 先回答你的 3 个问题
+This runbook is the standard operating guide for the non-Docker Privacy Calling deployment used in the project acceptance environment. It is organized by scenario so an operator can quickly choose the right procedure for the situation at hand.
 
-### Q1: API Key 该怎么填写？
-API Key 需要填两处，但值必须一致：
-1. 服务器端：`/home/ubuntu/fyp/PrivacyCalling/deploy/env/privacy-calling.env` 的 `API_KEY=...`
-2. 客户端调用 API 时：HTTP Header `x-api-key: ...`
+## 1. Scope
 
-也就是说，API Key 是服务端定义的密钥，客户端只是携带它。
+This deployment consists of:
 
-### Q2: 是否只需要在客户端填写用户，不需要服务器端填写？
-不是。SIP 用户必须先在服务器定义，再在客户端登录。
+- `asterisk`: SIP signaling, RTP media handling, and call bridging
+- `privacy-calling-api`: Node.js control-plane API and operations dashboard
+- `SQLite`: local data store at `data/privacy.db`
 
-必须同时满足：
-1. 服务器 Asterisk 里有 SIP endpoint（例如 `alice`、`bob`，在 `deploy/asterisk/pjsip.conf`）
-2. 服务器 SQLite 里有业务用户映射（`users` 表，`caller_endpoint` 对应 endpoint）
-3. 客户端软电话用对应账号密码注册到服务器
+Core capabilities covered by this runbook:
 
-如果只在客户端填账号，而服务器没这个 endpoint 或数据库没这个用户映射，呼叫会失败。
+- direct SIP client dialing with privacy masking
+- API-triggered callback privacy calls through `POST /v1/calls`
+- SIP MESSAGE privacy relay
+- operations dashboard at `/dashboard`
+- optional AI diagnostics
+- optional blockchain-based demo authentication
 
-### Q3: 我该怎样发起测试通话？
-你可以走两条路径：
-1. 客户端直拨测试（见第 5 节）：在 MicroSIP/Sipnetic 里直接拨 `bob` 或 `+8613900000002`
-2. 隐私模式测试（见第 6 节）：调用 `POST /v1/calls`，由系统回拨并做虚拟号掩码
+## 2. Standard Services, Files, and Demo Data
 
-区别：
-1. 客户端直拨：不需要 API，直接在软电话拨号，同时自动做匿名主叫（虚拟号）
-2. API 回拨：由服务端先回拨 Caller，再呼叫 Callee 并桥接，也会做匿名主叫
+### 2.1 Systemd services
 
----
+- `asterisk`
+- `privacy-calling-api`
 
-## 1. 前置条件检查
+### 2.2 Main files
 
-在服务器执行：
+- environment file: `deploy/env/privacy-calling.env`
+- environment template: `deploy/env/privacy-calling.env.example`
+- Asterisk SIP config: `deploy/asterisk/pjsip.conf`
+- Asterisk dialplan: `deploy/asterisk/extensions.conf`
+- Asterisk RTP config: `deploy/asterisk/rtp.conf`
+- database: `data/privacy.db`
+
+### 2.3 Default demo identities after `npm run db:seed`
+
+- API callers:
+  - `caller-alice` -> endpoint `alice` -> real number `+8613900000001`
+  - `caller-charlie` -> endpoint `charlie` -> real number `+8613900000003`
+- Demo callee:
+  - `callee-bob` -> endpoint `bob` -> real number `+8613900000002`
+- Demo virtual numbers:
+  - `+8613800011111`
+  - `+8613800011112`
+  - `+8613800011113`
+
+Important distinction:
+
+- API calls use `caller_user_id`, such as `caller-alice`
+- SIP clients register with endpoint credentials, such as `alice` or `bob`
+- the server-side API key is defined in `deploy/env/privacy-calling.env`
+- API clients must send the same value in the `x-api-key` header
+
+## 3. Scenario 1: First-Time Deployment or Full Reset
+
+Use this procedure when setting up a new server, rebuilding a test environment, or reinitializing the project from scratch.
+
+### 3.1 Procedure
+
+1. Install system dependencies:
 
 ```bash
 cd /home/ubuntu/fyp/PrivacyCalling
+sudo ./scripts/install-system.sh
+```
 
-sudo systemctl status asterisk --no-pager
-sudo systemctl status privacy-calling-api --no-pager
+2. Install Node.js dependencies:
 
-sudo asterisk -rx 'core show version'
+```bash
+cd /home/ubuntu/fyp/PrivacyCalling
+npm install
+```
+
+3. Create the environment file if it does not already exist:
+
+```bash
+cd /home/ubuntu/fyp/PrivacyCalling
+cp deploy/env/privacy-calling.env.example deploy/env/privacy-calling.env
+```
+
+4. Edit `deploy/env/privacy-calling.env` and set at least:
+
+- `API_KEY`
+- `ASTERISK_AMI_SECRET`
+- `AUTH_MODE` if you do not want the default behavior
+- optional `LLM_*` values if AI diagnostics will be used
+
+5. Edit `deploy/asterisk/pjsip.conf` and verify at least:
+
+- `external_signaling_address` matches the server public IP
+- `external_media_address` matches the server public IP
+- endpoint passwords for `alice`, `bob`, and `charlie`
+- trunk placeholder values if PSTN testing is planned
+
+Note: the repository currently contains a concrete public IP in `deploy/asterisk/pjsip.conf`. Replace it if your server IP is different.
+
+6. Initialize and seed the database:
+
+```bash
+cd /home/ubuntu/fyp/PrivacyCalling
+npm run db:init
+npm run db:seed
+```
+
+7. Deploy Asterisk configuration and sync AstDB:
+
+```bash
+cd /home/ubuntu/fyp/PrivacyCalling
+sudo ./scripts/deploy-asterisk-config.sh
+sudo ./scripts/sync-asterisk-astdb.sh
+```
+
+8. Install and start the API systemd service:
+
+```bash
+cd /home/ubuntu/fyp/PrivacyCalling
+sudo ./scripts/install-systemd-service.sh
+```
+
+### 3.2 Verification
+
+Run:
+
+```bash
+sudo systemctl status asterisk privacy-calling-api --no-pager
+curl -sS http://127.0.0.1:8080/health
 sudo asterisk -rx 'pjsip show endpoints'
 ```
 
-预期：
-1. 两个服务都是 `active (running)`
-2. `pjsip show endpoints` 能看到 `alice`、`bob`、`charlie`
+Expected result:
 
-### 1.1 服务启停与开机自启（不测试时可关闭）
+- both services are `active (running)`
+- `/health` returns `status: ok`
+- demo endpoints such as `alice`, `bob`, and `charlie` appear in the endpoint list
 
-本项目“整套服务”包含两个 systemd 单元：
-1. `asterisk`（SIP/RTP/桥接）
-2. `privacy-calling-api`（Node.js 控制面 API）
+## 4. Scenario 2: Start, Stop, Restart, and Autostart Control
 
-临时关闭（不改自启策略）：
+Use this procedure for normal service control during testing, maintenance, or demonstrations.
+
+### 4.1 Stop services without changing autostart
 
 ```bash
 sudo systemctl stop privacy-calling-api
 sudo systemctl stop asterisk
 ```
 
-恢复启动（建议先 SIP 核心再 API）：
+### 4.2 Start services
+
+Start Asterisk first, then the API:
 
 ```bash
 sudo systemctl start asterisk
 sudo systemctl start privacy-calling-api
 ```
 
-一键重启：
+### 4.3 Restart services
 
 ```bash
 sudo systemctl restart asterisk
 sudo systemctl restart privacy-calling-api
 ```
 
-查看运行状态：
+### 4.4 Check current status
 
 ```bash
 sudo systemctl status asterisk privacy-calling-api --no-pager
 ```
 
-如果你希望“服务器重启后也不要自动启动”：
+### 4.5 Disable autostart at boot
 
 ```bash
 sudo systemctl disable --now privacy-calling-api asterisk
 ```
 
-恢复开机自启并立即启动：
+### 4.6 Re-enable autostart and start immediately
 
 ```bash
 sudo systemctl enable --now asterisk privacy-calling-api
 ```
 
-### 1.2 Material You 运维面板（/dashboard）
+## 5. Scenario 3: Baseline Health Check Before Testing
 
-访问地址：
-1. 本机访问：`http://127.0.0.1:8080/dashboard`
-2. 远程访问：`http://<服务器公网IP>:8080/dashboard`
+Use this procedure before an acceptance demo, before troubleshooting a client issue, or after any restart.
 
-首次打开需要在页面顶部填入 API Key（与你 `deploy/env/privacy-calling.env` 的 `API_KEY` 一致）。
+### 5.1 Procedure
 
-面板能力：
-1. 查看服务状态（`asterisk`、`privacy-calling-api`）
-2. 查看 API/DB/AMI 健康与最近通话
-3. 一键 `start/stop/restart` 服务
-4. 查看告警中心（warning/error 聚合）
-5. 查看服务器负载曲线（2 秒刷新，默认 10 分钟窗口）
-6. 查看分级日志（`debug/info/warning/error` 高亮、关键词过滤、JSON 导出）
-7. 查看操作审计时间线（落库到 SQLite）
+```bash
+cd /home/ubuntu/fyp/PrivacyCalling
+sudo systemctl status asterisk privacy-calling-api --no-pager
+sudo asterisk -rx 'core show version'
+sudo asterisk -rx 'pjsip show endpoints'
+sudo asterisk -rx 'pjsip show contacts'
+curl -sS http://127.0.0.1:8080/health
+```
 
-说明：
-1. 最近通话现在同时包含 `POST /v1/calls` 回拨呼叫与客户端直拨呼叫
-2. 若你刚升级代码，请先执行一次 `sudo ./scripts/deploy-asterisk-config.sh` 和 `sudo systemctl restart privacy-calling-api`
+### 5.2 Expected result
 
-如果你发现“按钮可见但点击提示权限不足”，说明 Node 进程（`ubuntu` 用户）没有 sudo 免密执行 `systemctl` 的权限。执行一次：
+- both systemd services are running
+- `pjsip show endpoints` lists expected endpoints
+- registered clients appear in `pjsip show contacts`
+- `/health` reports both database and AMI as healthy
+
+### 5.3 If the health check fails
+
+- if `privacy-calling-api` is down, inspect `journalctl -u privacy-calling-api`
+- if Asterisk is down, inspect `systemctl status asterisk` and Asterisk logs
+- if AMI is unhealthy, verify `ASTERISK_AMI_*` values in `deploy/env/privacy-calling.env`
+- if no contacts are shown, the SIP clients are not registered yet
+
+## 6. Scenario 4: Apply Configuration Changes Safely
+
+Use this procedure after editing environment variables, Asterisk configuration, or database-backed user mappings.
+
+### 6.1 API environment changes
+
+Examples:
+
+- `API_KEY`
+- `AUTH_*`
+- `LLM_*`
+- `ASTERISK_AMI_*`
+
+Apply:
+
+```bash
+sudo systemctl restart privacy-calling-api
+sudo systemctl status privacy-calling-api --no-pager
+```
+
+### 6.2 Asterisk SIP or dialplan changes
+
+Examples:
+
+- `deploy/asterisk/pjsip.conf`
+- `deploy/asterisk/extensions.conf`
+- `deploy/asterisk/rtp.conf`
+- `deploy/asterisk/logger.conf`
+
+Apply:
+
+```bash
+cd /home/ubuntu/fyp/PrivacyCalling
+sudo ./scripts/deploy-asterisk-config.sh
+```
+
+### 6.3 SQLite user, virtual number, or mapping changes
+
+If you changed database-backed user data that should be visible to the dialplan, sync AstDB:
+
+```bash
+cd /home/ubuntu/fyp/PrivacyCalling
+sudo ./scripts/sync-asterisk-astdb.sh
+```
+
+### 6.4 Recommended post-change validation
+
+```bash
+sudo asterisk -rx 'dialplan show caller_in'
+sudo asterisk -rx 'dialplan show resolve_target'
+sudo asterisk -rx 'dialplan show select_virtual'
+sudo asterisk -rx 'pjsip show endpoints'
+curl -sS http://127.0.0.1:8080/health
+```
+
+## 7. Scenario 5: Configure or Rotate the API Key
+
+Use this procedure when the API key must be set for the first time or rotated for security reasons.
+
+### 7.1 Update the server-side API key
+
+Edit `deploy/env/privacy-calling.env`:
+
+```env
+API_KEY=my-strong-api-key-001
+```
+
+### 7.2 Restart the API service
+
+```bash
+sudo systemctl restart privacy-calling-api
+sudo systemctl status privacy-calling-api --no-pager
+```
+
+### 7.3 Use the same value in client requests
+
+All protected API requests must include:
+
+```bash
+-H 'x-api-key: my-strong-api-key-001'
+```
+
+### 7.4 Expected failure mode
+
+If the header value and the server value do not match, the API returns `401`.
+
+## 8. Scenario 6: Use the Operations Dashboard
+
+Use this procedure when you want a quick operational overview or simple service control through the browser.
+
+### 8.1 Access URLs
+
+- local: `http://127.0.0.1:8080/dashboard`
+- remote: `http://<SERVER_PUBLIC_IP>:8080/dashboard`
+
+### 8.2 What the dashboard provides
+
+- service status for `asterisk` and `privacy-calling-api`
+- API, database, and AMI health indicators
+- recent calls
+- alert center
+- server load charts
+- structured logs with level filtering
+- audit event timeline
+- optional AI diagnostics
+
+### 8.3 Authentication
+
+Enter the same API key value configured in `deploy/env/privacy-calling.env`.
+
+### 8.4 If service-control buttons fail with a permission error
+
+The `ubuntu` user needs passwordless `systemctl` permission for the managed services:
 
 ```bash
 SYSTEMCTL_BIN="$(command -v systemctl)"
@@ -125,81 +333,360 @@ sudo chmod 440 /etc/sudoers.d/privacy-calling-ops
 sudo systemctl restart privacy-calling-api
 ```
 
-日志排查接口示例（需 API Key）：
+### 8.5 Useful dashboard-related API endpoints
+
+Logs:
 
 ```bash
 curl -H 'x-api-key: change-me-api-key' \
   'http://127.0.0.1:8080/v1/ops/logs?services=privacy-calling-api,asterisk,asterisk-full&levels=warning,error&since_sec=600&limit=100'
 ```
 
-审计排查接口示例（需 API Key）：
+Audit events:
 
 ```bash
 curl -H 'x-api-key: change-me-api-key' \
   'http://127.0.0.1:8080/v1/ops/audit-events?limit=30'
 ```
 
----
+## 9. Scenario 7: Configure and Use AI Diagnostics
 
-## 2. 一次性初始化（首次部署或重置后）
+Use this procedure when the dashboard or API should summarize service state, alerts, logs, and audit data with an LLM.
 
-```bash
-cd /home/ubuntu/fyp/PrivacyCalling
-npm install
-npm run db:init
-npm run db:seed
-```
+### 9.1 Configuration
 
-检查数据库内容：
-
-```bash
-sqlite3 data/privacy.db "select id,display_name,real_e164,caller_endpoint,enabled from users;"
-sqlite3 data/privacy.db "select id,e164,enabled from virtual_numbers;"
-```
-
-默认种子（你现在可直接用）：
-1. Caller 用户 ID：`caller-alice`，端点 `alice`，真实号 `+8613900000001`
-2. Callee 用户：`callee-bob`，端点 `bob`，真实号 `+8613900000002`
-3. Caller 用户 ID：`caller-charlie`，端点 `charlie`，真实号 `+8613900000003`
-4. 虚拟号池：`+8613800011111/1112/1113`
-
----
-
-## 3. API Key 配置与生效
-
-### 3.1 修改服务器 API Key
-编辑：`/home/ubuntu/fyp/PrivacyCalling/deploy/env/privacy-calling.env`
-
-例如：
+Edit `deploy/env/privacy-calling.env`:
 
 ```env
-API_KEY=my-strong-api-key-001
+LLM_ENABLED=true
+LLM_PROVIDER=openai-compatible
+LLM_API_KEY=your-llm-api-key
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4.1-mini
+LLM_TIMEOUT_MS=30000
+LLM_TEMPERATURE=0.2
+LLM_MAX_TOKENS=1600
+LLM_DIAGNOSTIC_LOG_LIMIT=120
+LLM_DIAGNOSTIC_LOG_SINCE_SEC=900
 ```
 
-如果你暂时还没改，默认值就是：`change-me-api-key`。
+Notes:
 
-### 3.2 重启 API 服务
+- the service sends OpenAI-compatible `POST /chat/completions` requests to `LLM_BASE_URL`
+- you may point `LLM_BASE_URL` to another compatible gateway
+- the example deployment file in this repository currently uses DeepSeek-style values; that is acceptable as long as the upstream is compatible
+
+### 9.2 Apply changes
 
 ```bash
 sudo systemctl restart privacy-calling-api
-sudo systemctl status privacy-calling-api --no-pager
 ```
 
-### 3.3 用同一个值调用 API
+### 9.3 Use from the dashboard
 
-调用时 Header 必须是：
+1. Open `/dashboard`
+2. authenticate with the API key or demo login if enabled
+3. click `AI Diagnostics`
+4. review the summary, findings, and suggested shell commands
+
+### 9.4 Use from the API
 
 ```bash
--H 'x-api-key: my-strong-api-key-001'
+curl -X POST -H 'x-api-key: change-me-api-key' -H 'Content-Type: application/json' \
+  'http://127.0.0.1:8080/v1/ops/diagnostics' \
+  -d '{
+    "services":["privacy-calling-api","asterisk","asterisk-full"],
+    "levels":["warning","error"],
+    "since_sec":900,
+    "log_limit":120
+  }'
 ```
 
-如果不一致，会返回 401。
+### 9.5 Security and behavior notes
 
-### 3.4 区块链鉴权最小演示（可选）
+- the server redacts API keys, JWTs, phone numbers, and message bodies before sending data to the model
+- diagnostic commands are intended to be read-only investigation commands
+- each request is recorded in `ops_audit_events` with action `ai_diagnostics_requested`
+- if `LLM_API_KEY` or `LLM_MODEL` is missing, diagnostics are treated as not configured
 
-如果你要演示“节点钱包签名登录”，推荐先用 `hybrid` 模式，避免把现有 API Key 流程一次性切断。
+## 10. Scenario 8: Register SIP Clients
 
-编辑：`/home/ubuntu/fyp/PrivacyCalling/deploy/env/privacy-calling.env`
+Use this procedure when preparing MicroSIP, Sipnetic, or another SIP softphone for acceptance testing.
+
+### 10.1 Ensure privacy dialplan is deployed
+
+```bash
+cd /home/ubuntu/fyp/PrivacyCalling
+sudo ./scripts/deploy-asterisk-config.sh
+sudo asterisk -rx 'dialplan show caller_in'
+sudo asterisk -rx 'dialplan show select_virtual'
+```
+
+Expected result:
+
+- `caller_in` exists
+- `select_virtual` exists
+
+### 10.2 Demo account credentials
+
+- `alice` / `alice-strong-password`
+- `bob` / `bob-strong-password`
+- `charlie` / `charlie-strong-password`
+
+### 10.3 Generic softphone settings
+
+Use the following values:
+
+- SIP server or proxy: `<SERVER_PUBLIC_IP>:5160`
+- domain: `<SERVER_PUBLIC_IP>` without the port
+- username: endpoint name, such as `alice`
+- authentication user: same as username
+- password: endpoint password
+- transport: `UDP`
+
+Do not:
+
+- add the `sip:` prefix in the server or proxy field
+- put the port in the domain field
+- enable TLS or SRTP for this V1 deployment unless you have added support yourself
+
+### 10.4 Verify registration
+
+```bash
+sudo asterisk -rx 'pjsip show contacts'
+```
+
+Expected result:
+
+- the registered endpoint appears as `Avail` or `Reachable`
+
+### 10.5 If registration fails
+
+Run:
+
+```bash
+sudo asterisk -rx 'pjsip show endpoints'
+sudo asterisk -rx 'pjsip show contacts'
+sudo asterisk -rvvv
+```
+
+Inside the Asterisk CLI:
+
+```text
+pjsip set logger on
+```
+
+Then register again from the client and inspect the `REGISTER` transaction and response codes.
+
+### 10.6 Special case: `AOR '' not found`
+
+This usually means the client sent an invalid registration target. Re-check:
+
+- username = endpoint name
+- authentication user = endpoint name
+- domain = server IP only
+- server or proxy = server IP with port `5160`
+
+## 11. Scenario 9: Place a Direct SIP Privacy Call
+
+Use this procedure when testing privacy masking between SIP clients without using the API.
+
+### 11.1 Procedure
+
+From Alice, dial any of the following:
+
+- `bob`
+- `sip:bob@<SERVER_PUBLIC_IP>:5160`
+- `+8613900000002`
+
+From Bob, dial any of the following:
+
+- `alice`
+- `sip:alice@<SERVER_PUBLIC_IP>:5160`
+- `+8613900000001`
+
+From Alice to Charlie:
+
+- `charlie`
+- `sip:charlie@<SERVER_PUBLIC_IP>:5160`
+- `+8613900000003`
+
+### 11.2 Expected result
+
+- the callee sees a virtual number, not the caller's real identity
+- direct client dialing is privacy-protected by default in the deployed dialplan
+
+### 11.3 Single-endpoint audio check
+
+Dial:
+
+- `*900`
+- or `900` if the client strips `*`
+
+Expected result:
+
+- you hear the echo-test prompt
+- after the prompt, your own voice is played back with slight delay
+
+Interpretation:
+
+- prompt heard, but no voice loopback: upstream RTP from client to Asterisk is probably broken
+- no prompt at all: downstream RTP from Asterisk to client is probably broken
+- both prompt and loopback work: the client-to-server audio path is healthy
+
+## 12. Scenario 10: Place an API-Triggered Privacy Callback Call
+
+Use this procedure when testing the main control-plane call flow through `POST /v1/calls`.
+
+### 12.1 Preconditions
+
+- the caller endpoint is registered
+- the API key is correct
+- `privacy-calling-api` and Asterisk are running
+
+### 12.2 Trigger the call
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:8080/v1/calls' \
+  -H 'x-api-key: my-strong-api-key-001' \
+  -H 'content-type: application/json' \
+  -d '{
+    "caller_user_id": "caller-alice",
+    "callee_e164": "+8613900000002",
+    "timeout_sec": 20
+  }'
+```
+
+If you call from another machine, replace `127.0.0.1` with the server public IP and ensure port `8080` is reachable.
+
+### 12.3 Expected response
+
+```json
+{
+  "call_id": "...",
+  "selected_virtual_id": "+8613800011111",
+  "status": "originating"
+}
+```
+
+### 12.4 Required answer order
+
+1. the platform first calls the caller endpoint
+2. the caller answers
+3. the platform then rings the callee
+4. the callee answers
+5. the callee should see the selected virtual number
+
+### 12.5 Query call state
+
+```bash
+curl -sS -H 'x-api-key: my-strong-api-key-001' \
+  'http://127.0.0.1:8080/v1/calls/<call_id>'
+```
+
+Run it repeatedly if you want to watch state transitions.
+
+## 13. Scenario 11: Interpret Call and Message Status
+
+Use this section when the call was created successfully but the result is unclear.
+
+### 13.1 Common call status fields
+
+- `status`: overall call state
+- `a_leg_status`: caller-side leg
+- `b_leg_status`: callee-side leg
+- `bridge_status`: `pending`, `bridged`, or `released`
+- `failure_reason`: failure cause when available
+
+### 13.2 Typical call status interpretation
+
+- `a_leg_status=failed`: caller endpoint was unavailable, misconfigured, or unanswered
+- `b_leg_status=failed`: callee endpoint was unavailable, the target could not be resolved, or the trunk was unavailable
+- `status=failed` with `failure_reason=trunk_not_configured`: the target was not a local SIP user and no default PSTN trunk was enabled
+
+### 13.3 Query recent messages
+
+```bash
+curl -H 'x-api-key: change-me-api-key' \
+  'http://127.0.0.1:8080/v1/messages?limit=20&since_sec=3600'
+
+curl -H 'x-api-key: change-me-api-key' \
+  'http://127.0.0.1:8080/v1/messages?status=failed&limit=20'
+
+curl -H 'x-api-key: change-me-api-key' \
+  'http://127.0.0.1:8080/v1/messages/<message_id>'
+```
+
+## 14. Scenario 12: Enable and Test SIP MESSAGE Privacy Relay
+
+Use this procedure when validating privacy-protected text delivery between SIP clients.
+
+### 14.1 Verify required modules
+
+```bash
+sudo asterisk -rx 'module show like app_message'
+sudo asterisk -rx 'module show like res_pjsip_messaging'
+```
+
+Expected result:
+
+- both modules are present and running
+
+### 14.2 Deploy and confirm routing
+
+```bash
+cd /home/ubuntu/fyp/PrivacyCalling
+sudo ./scripts/deploy-asterisk-config.sh
+sudo ./scripts/sync-asterisk-astdb.sh
+sudo asterisk -rx 'dialplan show privacy_message_in'
+sudo asterisk -rx 'pjsip show endpoint alice'
+```
+
+Expected result:
+
+- `privacy_message_in` exists
+- the endpoint shows `message_context = privacy_message_in`
+
+### 14.3 Send a message
+
+1. ensure the sender and receiver are both registered
+2. send a plain-text SIP message from Alice to `bob` or `+8613900000002`
+3. verify that Bob sees a virtual number as the sender identity
+
+### 14.4 Expected failure reasons
+
+- receiver offline: `target_offline`
+- non-plain-text content: `invalid_content_type`
+- empty body: `empty_body`
+- oversized body over 1024 bytes: `body_too_large`
+
+### 14.5 Observe message state transitions
+
+```bash
+sudo asterisk -rvvv
+```
+
+Recommended CLI commands:
+
+```text
+core set verbose 5
+core set debug 3
+pjsip set logger on
+```
+
+You should see `UserEvent: PrivacyMessageState` events such as `created`, `routing`, `delivered`, and `failed`.
+
+## 15. Scenario 13: Demo Blockchain Authentication
+
+Use this procedure only if you need to demonstrate wallet-based login. For normal acceptance work, API key authentication is simpler.
+
+### 15.1 Recommended mode
+
+Use `AUTH_MODE=hybrid` so API key access remains available as a fallback.
+
+### 15.2 Configuration
+
+Edit `deploy/env/privacy-calling.env`:
 
 ```env
 AUTH_MODE=hybrid
@@ -215,19 +702,21 @@ CHAIN_ALLOWLIST_MODE=static
 CHAIN_ALLOWED_ADDRESSES=0x1111111111111111111111111111111111111111
 ```
 
-重启服务：
+Restart the API:
 
 ```bash
 sudo systemctl restart privacy-calling-api
 ```
 
-获取 challenge：
+### 15.3 Challenge and verify flow
+
+Get a challenge:
 
 ```bash
 curl 'http://127.0.0.1:8080/v1/auth/challenge?address=0x1111111111111111111111111111111111111111&node_id=node-a'
 ```
 
-然后用钱包对返回 `message` 执行 `personal_sign`，拿到 `signature`，再提交：
+Sign the returned message with `personal_sign`, then submit:
 
 ```bash
 curl -X POST 'http://127.0.0.1:8080/v1/auth/verify' \
@@ -240,14 +729,14 @@ curl -X POST 'http://127.0.0.1:8080/v1/auth/verify' \
   }'
 ```
 
-返回 `access_token` 后即可改用：
+Use the returned JWT:
 
 ```bash
 curl -H 'Authorization: Bearer <access_token>' \
   'http://127.0.0.1:8080/v1/ops/overview'
 ```
 
-如果你没有钱包，直接走免签名演示接口：
+### 15.4 No-wallet demo path
 
 ```bash
 curl -X POST 'http://127.0.0.1:8080/v1/auth/demo-login' \
@@ -255,288 +744,124 @@ curl -X POST 'http://127.0.0.1:8080/v1/auth/demo-login' \
   -d '{}'
 ```
 
-说明：
-1. 该接口仅在 `AUTH_DEMO_MODE=true` 时开放
-2. 页面 `/dashboard` 已内置“Demo 登录（免钱包）”按钮
-3. 这是演示链路，不等价于真实链上签名鉴权
+Notes:
 
----
+- this endpoint only works when `AUTH_DEMO_MODE=true`
+- `/dashboard` also provides a `Demo Login` button
+- this path is for demonstration only, not real wallet verification
 
-## 4. 软电话登录（MicroSIP / Sipnetic）
+## 16. Scenario 14: Add Users or Provision Scale-Test Accounts
 
-### 4.1 先启用“客户端直拨隐私路由”（只需做一次）
-为了让客户端直接拨号时自动做隐私保护，先在服务器执行：
+Use this procedure when you need more SIP identities than the built-in demo users.
+
+### 16.1 Add one manual test user
+
+1. Add endpoint, auth, and AOR sections to `deploy/asterisk/pjsip.conf`.
+2. Insert a row into the `users` table. Example:
+
+```bash
+sqlite3 data/privacy.db "
+insert into users(id,display_name,real_e164,caller_endpoint,enabled,created_at,updated_at)
+values('caller-david','David Caller','+8613900000004','david',1,datetime('now'),datetime('now'));
+"
+```
+
+3. Re-deploy Asterisk config and sync AstDB:
 
 ```bash
 cd /home/ubuntu/fyp/PrivacyCalling
 sudo ./scripts/deploy-asterisk-config.sh
-sudo asterisk -rx 'dialplan show caller_in'
-sudo asterisk -rx 'dialplan show select_virtual'
+sudo ./scripts/sync-asterisk-astdb.sh
 ```
 
-如果能看到 `caller_in` 和 `select_virtual` context，说明直拨隐私路由已生效。
-
-### 4.2 MicroSIP 登录参数（Windows）
-
-先记一个变量：
-1. `SERVER_IP` = 你的服务器公网 IP（示例：`1.2.3.4`）
-
-Alice 账号逐字段填写（按你看到的字段名）：
-1. 账户名称: `Alice`
-2. SIP服务器: `SERVER_IP:5160`（示例 `1.2.3.4:5160`）
-3. SIP代理: `SERVER_IP:5160`
-4. 用户名: `alice`
-5. 域名: `SERVER_IP`（只填 IP，不带端口）
-6. 登录名: `alice`
-7. 密码: `alice-strong-password`
-
-Bob 账号逐字段填写：
-1. 账户名称: `Bob`
-2. SIP服务器: `SERVER_IP:5160`
-3. SIP代理: `SERVER_IP:5160`
-4. 用户名: `bob`
-5. 域名: `SERVER_IP`
-6. 登录名: `bob`
-7. 密码: `bob-strong-password`
-
-Charlie 账号逐字段填写：
-1. 账户名称: `Charlie`
-2. SIP服务器: `SERVER_IP:5160`
-3. SIP代理: `SERVER_IP:5160`
-4. 用户名: `charlie`
-5. 域名: `SERVER_IP`
-6. 登录名: `charlie`
-7. 密码: `charlie-strong-password`
-
-补充建议：
-1. Transport 选择 `UDP`
-2. 不启用 TLS/SRTP（当前 V1 未开启）
-3. 不要在 `SIP服务器` / `SIP代理` 填 `sip:` 前缀
-4. 域名不要写成 `SERVER_IP:5160`（域名只填 IP）
-
-### 4.3 Sipnetic 登录参数（Android）
-
-Alice 账号逐字段填写（按你看到的字段名）：
-1. Display name: `Alice`
-2. user name: `alice`
-3. authentication user: `alice`
-4. password: `alice-strong-password`
-5. domain: `SERVER_IP`（只填 IP，不带端口）
-6. proxy server address: `SERVER_IP:5160`
-
-Bob 账号逐字段填写：
-1. Display name: `Bob`
-2. user name: `bob`
-3. authentication user: `bob`
-4. password: `bob-strong-password`
-5. domain: `SERVER_IP`
-6. proxy server address: `SERVER_IP:5160`
-
-Charlie 账号逐字段填写：
-1. Display name: `Charlie`
-2. user name: `charlie`
-3. authentication user: `charlie`
-4. password: `charlie-strong-password`
-5. domain: `SERVER_IP`
-6. proxy server address: `SERVER_IP:5160`
-
-补充建议：
-1. Transport 选择 `UDP`
-2. 如果有“Outbound proxy mode”，选择 `Always`
-3. 不要给 `domain` 填端口
-
-### 4.4 注册成功确认
+4. Verify:
 
 ```bash
-sudo asterisk -rx 'pjsip show contacts'
+sudo asterisk -rx 'pjsip show endpoint david'
+sudo asterisk -rx 'database show pc_users_by_endpoint'
 ```
 
-预期：`alice`、`bob`、`charlie` 都是 `Avail` / `Reachable`（不是 `Unavailable`）。
+Notes:
 
-如果 MicroSIP 仍提示“没有找到用户/无法注册”，立刻执行：
+- direct dial resolution now prefers AstDB, so you do not need to hard-code every new user into `extensions.conf`
+- existing virtual numbers are enough for basic testing; the API can create a callee-to-virtual mapping automatically when needed
+
+### 16.2 Provision many users for scale testing
 
 ```bash
-sudo asterisk -rx 'pjsip show endpoints'
-sudo asterisk -rx 'pjsip show contacts'
-sudo asterisk -rvvv
+cd /home/ubuntu/fyp/PrivacyCalling
+npm run users:provision -- --count 100
+sudo ./scripts/deploy-asterisk-config.sh
+sudo ./scripts/sync-asterisk-astdb.sh
 ```
 
-然后在 Asterisk CLI 里执行：
+Artifacts generated by the provision script:
 
-```text
-pjsip set logger on
-```
+- SQLite user records
+- SQLite virtual numbers and mappings
+- `deploy/asterisk/pjsip.generated.conf`
+- `data/generated-users.csv`
 
-再从客户端点一次注册，观察是否出现 `REGISTER` 请求和 `401/403/404` 响应码。
-
-### 4.5 针对你这个报错的特定说明（AOR '' not found）
-
-如果你看到类似日志：
-
-```text
-find_registrar_aor: AOR '' not found for endpoint 'alice' / 'bob'
-```
-
-含义：客户端发来的 REGISTER 没带正确的用户 AOR（常见是字段填法不对）。
-
-本项目已做服务端兼容修复（AOR 名与用户名同名：`alice`、`bob`、`charlie`），你还需要确保客户端字段严格如下：
-1. `用户名/user name` = `alice` 或 `bob` 或 `charlie`
-2. `登录名/authentication user` = `alice` 或 `bob` 或 `charlie`
-3. `域名/domain` = `SERVER_IP`（不带端口）
-4. `SIP服务器/proxy` = `SERVER_IP:5160`
-
-并且不要填：
-1. 空用户名
-2. `domain` 写成 `SERVER_IP:5160`
-3. `SIP服务器` 填 `sip:SERVER_IP:5160`
-
----
-
-## 5. 通过客户端直接发起测试通话（不在服务器敲命令）
-
-在 Alice 客户端直接拨号以下任一目标：
-1. `bob`
-2. `sip:bob@<你的服务器公网IP>:5160`
-3. `+8613900000002`
-
-然后 Bob 客户端接听即可。
-预期 Bob 看到主叫号：`+8613800011111`（虚拟号）。
-
-反向测试时，Bob 可拨：
-1. `alice`
-2. `sip:alice@<你的服务器公网IP>:5160`
-3. `+8613900000001`
-预期 Alice 看到主叫号：`+8613800011112`（虚拟号）。
-
-新增用户测试（Charlie）：
-1. Alice 可拨 `charlie` / `sip:charlie@<你的服务器公网IP>:5160` / `+8613900000003`
-2. Charlie 可拨 `alice` / `bob` 或其 E.164
-
-注意：现在“客户端直拨”默认也做隐私保护。Bob 应看到虚拟号（例如 `+8613800011111`），而不是 Alice 真实身份。
-
-### 5.1 客户端单端语音自检（Echo Test）
-
-如果你要先验证“客户端到 Asterisk 的语音链路是否通”，直接在任一已注册客户端拨：
-1. `*900`（首选）
-2. `900`（如果软电话把 `*` 吃掉）
-
-预期行为：
-1. 先听到提示音（`demo-echotest`）
-2. 之后你说话会被系统回放（有轻微延迟）
-
-判定标准：
-1. 能听到提示音，但听不到自己回声：通常是“客户端 -> Asterisk”上行 RTP 没到
-2. 连提示音都听不到：通常是“Asterisk -> 客户端”下行 RTP 没到
-3. 提示音和回声都正常：该客户端与服务器语音链路基本正常，再测双端互拨
-
----
-
-## 6. 隐私模式测试（API 触发回拨）
-
-### 6.1 触发隐私呼叫
+### 16.3 Optional loadbot for simulated online users
 
 ```bash
-curl -sS -X POST 'http://127.0.0.1:8080/v1/calls' \
-  -H 'x-api-key: my-strong-api-key-001' \
-  -H 'content-type: application/json' \
-  -d '{
-    "caller_user_id": "caller-alice",
-    "callee_e164": "+8613900000002",
-    "timeout_sec": 20
-  }'
+cd /home/ubuntu/fyp/PrivacyCalling
+npm run sip:loadbot -- --port 17060 --auto-bye-ms 1500
 ```
 
-说明：
-1. 在服务器本机执行用 `127.0.0.1`
-2. 在你自己电脑执行请改成 `http://<服务器公网IP>:8080/...`（并确保安全组/防火墙放行 8080）
+## 17. Scenario 15: Enable SIP-to-PSTN Calls
 
-会返回：
+Use this procedure only if you have real trunk credentials and want to test beyond SIP-to-SIP calling.
 
-```json
-{
-  "call_id": "...",
-  "selected_virtual_id": "+8613800011111",
-  "status": "originating"
-}
-```
+### 17.1 Update Asterisk trunk settings
 
-### 6.2 人工接听顺序（非常重要）
-1. 先接听 Alice（系统先回拨 Alice）
-2. 然后 Bob 会响铃
-3. Bob 接听后，双方通话建立
-4. Bob 看到的是虚拟号，不是 Alice 真实号
+Edit `deploy/asterisk/pjsip.conf` and replace the placeholder `carrier_out` values with real credentials.
 
-### 6.3 查询状态
+### 17.2 Enable the default trunk in SQLite
 
 ```bash
-curl -sS -H 'x-api-key: my-strong-api-key-001' \
-  'http://127.0.0.1:8080/v1/calls/<替换成call_id>'
+sqlite3 data/privacy.db "update trunks set enabled=1 where name='carrier_out';"
 ```
 
-可重复执行观察状态。
+### 17.3 Apply changes
 
----
+```bash
+cd /home/ubuntu/fyp/PrivacyCalling
+sudo ./scripts/deploy-asterisk-config.sh
+sudo systemctl restart privacy-calling-api
+```
 
-## 7. 常见状态解释
+## 18. Scenario 16: Collect Logs and Evidence
 
-`GET /v1/calls/{id}` 常见字段：
-1. `status=originating/ringing/answered/bridged/completed/failed`
-2. `a_leg_status`：Caller 腿状态
-3. `b_leg_status`：Callee 腿状态
-4. `bridge_status`：`pending/bridged/released`
-5. `failure_reason`：失败原因（Asterisk 原因码或状态）
+Use this procedure when you need to troubleshoot, keep incident records, or share evidence with another engineer.
 
-快速判断：
-1. `a_leg_status=failed`：通常 Caller 未注册/未接听/账号错误
-2. `b_leg_status=failed`：通常 Callee 未注册/号码映射不到本地用户/Trunk 不可用
-3. `status=failed` 且 `failure_reason=trunk_not_configured`：你传的是外部号码，但未启用可用 Trunk
+### 18.1 API service logs
 
----
-
-## 8. 你当前最容易踩的坑（按概率排序）
-
-1. API Key 不一致
-- 现象：所有 `/v1/*` 返回 401
-- 修复：确认 env 里的 `API_KEY` 与 curl Header 完全一致
-
-2. 软电话未成功注册
-- 现象：呼叫发起成功但很快 failed
-- 修复：`sudo asterisk -rx 'pjsip show contacts'` 检查在线状态
-
-3. `caller_user_id` 写错
-- 现象：`caller_not_found`
-- 修复：使用 `caller-alice`（默认种子）或在 `users` 表新增后再调用
-
-4. `callee_e164` 与本地用户不匹配
-- 现象：`trunk_not_configured` 或 B-leg failed
-- 修复：SIP↔SIP 测试时用 `+8613900000002`（默认 Bob 真实号）
-
----
-
-## 9. 必要排障命令
-
-### API 服务日志
 ```bash
 sudo journalctl -u privacy-calling-api -f
 ```
 
-### Asterisk 落盘日志（推荐发这个文件，不用手抄终端）
+### 18.2 Asterisk log files
+
 ```bash
 sudo ls -lh /var/log/asterisk/
 sudo tail -n 200 /var/log/asterisk/messages
 sudo tail -n 200 /var/log/asterisk/full
 ```
 
-说明：
-1. `messages` 只有 notice/warning/error
-2. `full` 含 verbose/debug（含 SIP/RTP 详细日志）
+Notes:
 
-### Asterisk CLI
+- `messages` usually contains notice, warning, and error level output
+- `full` contains the detailed SIP and RTP traces needed for media debugging
+
+### 18.3 Asterisk CLI debug session
+
 ```bash
 sudo asterisk -rvvv
 ```
 
-进入 CLI 后可执行：
+Useful CLI commands:
+
 ```text
 pjsip show endpoints
 pjsip show contacts
@@ -546,7 +871,10 @@ pjsip set logger on
 rtp set debug on
 ```
 
-如果你想把一次测试完整保存成文件（便于发我）：
+### 18.4 Capture a focused debug window to a file
+
+Manual method:
+
 ```bash
 sudo asterisk -rx 'core set verbose 5'
 sudo asterisk -rx 'core set debug 3'
@@ -555,149 +883,139 @@ sudo asterisk -rx 'rtp set debug on'
 sudo timeout 120 tail -f /var/log/asterisk/full | tee /home/ubuntu/fyp/PrivacyCalling/pjsip_rtp_capture.log
 ```
 
-也可以用一键脚本：
+Scripted method:
+
 ```bash
 cd /home/ubuntu/fyp/PrivacyCalling
 ./scripts/capture-audio-debug.sh /home/ubuntu/fyp/PrivacyCalling/pjsip_rtp_capture.log 120
 ```
 
-### 数据库看最新通话
+### 18.5 Query recent calls from SQLite
+
 ```bash
-sqlite3 data/privacy.db "select id,status,a.created_at,failure_reason from calls a order by a.created_at desc limit 10;"
+sqlite3 data/privacy.db "select id,status,created_at,failure_reason from calls order by created_at desc limit 10;"
 ```
 
----
+## 19. Scenario 17: Common Incidents and Recovery Actions
 
-## 10. 无声问题专项排查（重点）
+Use this section for fast symptom-based troubleshooting.
 
-如果“能接通但没声音”，按这个顺序检查：
+### 19.1 All protected API requests return `401`
 
-1. 检查 SIP/SDP 是否发布公网地址
+Likely cause:
+
+- the `x-api-key` header does not match `API_KEY` in `deploy/env/privacy-calling.env`
+
+Action:
+
+1. re-check the server-side `API_KEY`
+2. restart `privacy-calling-api` if you changed it
+3. send the exact same value in the request header
+
+### 19.2 SIP client cannot register
+
+Likely causes:
+
+- wrong username or password
+- wrong server, proxy, or domain field
+- domain includes the port
+- server field includes `sip:`
+
+Action:
+
+1. run `sudo asterisk -rx 'pjsip show contacts'`
+2. enable `pjsip set logger on`
+3. repeat registration and inspect the `REGISTER` transaction
+
+### 19.3 Call is created but fails quickly
+
+Likely causes:
+
+- caller endpoint not registered
+- wrong `caller_user_id`
+- callee cannot be resolved
+- no default trunk for non-local targets
+
+Action:
+
+1. verify caller registration with `pjsip show contacts`
+2. verify `caller_user_id` exists in SQLite
+3. verify the callee E.164 matches a local user for SIP-to-SIP testing
+4. if testing PSTN, enable and configure the default trunk
+
+### 19.4 Connected call has no audio
+
+Likely causes:
+
+- public IP in `pjsip.conf` is wrong
+- cloud firewall or security group blocks RTP
+- ACK or RTP is not reaching the server
+
+Action:
+
+1. check transport settings:
+
 ```bash
 sudo asterisk -rx 'pjsip show transport transport-udp-privacy'
 ```
-预期：
-1. `external_signaling_address = 118.25.104.104`
-2. `external_media_address = 118.25.104.104`
 
-2. 通话时看 200 OK SDP 的 `c=` 地址
-在 `pjsip set logger on` 输出里，找到 200 OK 的 SDP：
-1. 正确：`c=IN IP4 118.25.104.104`
-2. 错误：`c=IN IP4 10.x.x.x / 192.168.x.x / 172.16-31.x.x`
+2. verify that `external_signaling_address` and `external_media_address` match the real server public IP
+3. confirm that UDP `5160` and UDP `20000-20199` are open
+4. enable `pjsip set logger on` and inspect the SDP `c=` address in `200 OK`
+5. enable `rtp set debug on` and verify both sent and received RTP packets are present
 
-3. 检查云安全组（非常关键）
-必须放行 UDP：
-1. `5160`
-2. `20000-20199`
+### 19.5 `trunk_not_configured`
 
-4. 检查是否收到了 ACK（针对 200 OK）
-如果 Asterisk 对同一个 INVITE 连续重发多个 `200 OK`，通常是客户端 ACK 没到服务端（多半是 Contact/路由/NAT 问题）。
+Likely cause:
 
-5. 检查 RTP 是否双向
-在 Asterisk CLI 执行 `rtp set debug on`，通话时应同时看到：
-1. `Sent RTP packet to ...`
-2. `Got RTP packet from ...`
+- the callee was not a local SIP user and no enabled default trunk was available
 
-如果只有 Sent 没有 Got，通常是客户端到服务端 RTP 被防火墙/运营商 NAT 拦截。
+Action:
 
----
+1. for SIP-to-SIP testing, call a local demo number such as `+8613900000002`
+2. for PSTN, configure and enable `carrier_out`
 
-## 11. 如果你要新增一个测试用户（示例：david）
+### 19.6 Dashboard can read status but cannot control services
 
-你要做 4 件事，缺一不可：
+Likely cause:
 
-1. 在 `deploy/asterisk/pjsip.conf` 增加 `david` 的三段配置（`type=endpoint/auth/aor`，section 名都用 `david`）。
-2. 在 `deploy/asterisk/extensions.conf` 的 `[resolve_target]` 增加 david 的目标映射（endpoint 与 E.164）。
-3. 在 `deploy/asterisk/extensions.conf` 的 `[select_virtual]` 增加 david 被叫时使用的虚拟号规则。
-4. 在 SQLite 增加 users 记录（`caller_endpoint` 必须等于 endpoint 名）：
-```bash
-sqlite3 data/privacy.db "
-insert into users(id,display_name,real_e164,caller_endpoint,enabled,created_at,updated_at)
-values('caller-david','David Caller','+8613900000004','david',1,datetime('now'),datetime('now'));
-"
-```
+- the `ubuntu` user does not have passwordless permission for the required `systemctl` actions
 
-配置改完后执行：
+Action:
+
+- apply the sudoers fix described in Section 8.4
+
+### 19.7 SIP MESSAGE delivery fails
+
+Likely causes:
+
+- target offline
+- non-plain-text content
+- empty body
+- oversized body
+
+Action:
+
+1. verify both endpoints are online
+2. confirm content type is `text/plain`
+3. inspect recent message status through `/v1/messages`
+
+## 20. Scenario 18: Local Development Without Systemd
+
+Use this procedure if you only want to run the API manually during development.
+
+### 20.1 Start the API in the current shell
+
 ```bash
 cd /home/ubuntu/fyp/PrivacyCalling
-sudo ./scripts/deploy-asterisk-config.sh
-sudo asterisk -rx 'dialplan show resolve_target'
-sudo asterisk -rx 'dialplan show select_virtual'
+set -a
+. deploy/env/privacy-calling.env
+set +a
+npm start
 ```
 
-然后客户端才能用 `david` 登录，API 才能用 `caller_user_id=caller-david`，并且客户端直拨也能保持隐私号码显示。
+### 20.2 Notes
 
----
-
-## 12. SIP↔PSTN（后续）
-
-目前默认是 SIP↔SIP 验收路径。要开 PSTN：
-1. 配置 `deploy/asterisk/pjsip.conf` 的 `carrier_out` 真实 Trunk 参数
-2. 在 `trunks` 表把默认 trunk 设为 `enabled=1`
-3. 重启 Asterisk 与 API
-
-```bash
-sudo systemctl restart asterisk
-sudo systemctl restart privacy-calling-api
-```
-
----
-
-## 13. SIP MESSAGE 隐私文本验收（一期）
-
-### 13.1 部署前检查（模块）
-```bash
-sudo asterisk -rx 'module show like app_message'
-sudo asterisk -rx 'module show like res_pjsip_messaging'
-```
-
-预期：两个模块都能查询到（`Status: Running`）。
-
-### 13.2 下发配置并确认路由
-```bash
-cd /home/ubuntu/fyp/PrivacyCalling
-sudo ./scripts/deploy-asterisk-config.sh
-sudo ./scripts/sync-asterisk-astdb.sh
-sudo asterisk -rx 'dialplan show privacy_message_in'
-sudo asterisk -rx 'pjsip show endpoint alice'
-```
-
-预期：
-1. `privacy_message_in` context 存在
-2. endpoint 中有 `message_context = privacy_message_in`
-
-### 13.3 客户端互发文本（Alice -> Bob）
-1. 确认 Alice/Bob 已注册在线（`pjsip show contacts`）
-2. 在 Alice 软电话向 `bob` 或 `+8613900000002` 发送纯文本消息（`text/plain`）
-3. Bob 收到后，发件人应显示虚拟号而非 Alice 真实号
-
-### 13.4 API 查询消息终态
-```bash
-curl -H 'x-api-key: <你的API_KEY>' \
-  'http://127.0.0.1:8080/v1/messages?limit=20&since_sec=3600'
-
-curl -H 'x-api-key: <你的API_KEY>' \
-  'http://127.0.0.1:8080/v1/messages?status=failed&limit=20'
-
-curl -H 'x-api-key: <你的API_KEY>' \
-  'http://127.0.0.1:8080/v1/messages/<message_id>'
-```
-
-### 13.5 失败场景预期
-1. 接收方离线：`status=failed` 且 `failure_reason=target_offline`
-2. 非 `text/plain`：`status=failed` 且 `failure_reason=invalid_content_type`
-3. 空消息或超长（>1024）：`status=failed` 且 `failure_reason=empty_body/body_too_large`
-
-### 13.6 观测与排障
-```bash
-sudo asterisk -rvvv
-```
-
-CLI 中建议：
-```text
-core set verbose 5
-core set debug 3
-pjsip set logger on
-```
-
-你应能看到 `UserEvent: PrivacyMessageState` 的 `created/routing/delivered/failed` 全链路事件。
+- Asterisk still needs to be installed and running separately
+- this mode is useful for iterative development and console logging
+- systemd remains the preferred mode for acceptance testing and demos

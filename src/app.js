@@ -12,6 +12,7 @@ const AUDIT_ACTION_ALLOW_LIST = new Set([
   'logs_export_json',
   'logs_manual_refresh',
   'logs_filters_updated',
+  'ai_diagnostics_requested',
   'messages_manual_refresh',
   'messages_filters_updated',
   'messages_export_json'
@@ -49,6 +50,193 @@ function ensureOpsEnabled({ opsManager, config }) {
   }
 }
 
+function evaluateServiceLevel(service) {
+  if (!service || !service.active_state) {
+    return 'unknown';
+  }
+  if (service.active_state === 'active') {
+    return 'healthy';
+  }
+  if (service.active_state === 'activating' || service.active_state === 'deactivating') {
+    return 'degraded';
+  }
+  return 'critical';
+}
+
+function severityRank(level) {
+  if (level === 'critical' || level === 'error') {
+    return 3;
+  }
+  if (level === 'degraded' || level === 'warning') {
+    return 2;
+  }
+  if (level === 'healthy' || level === 'ok' || level === 'info') {
+    return 1;
+  }
+  return 0;
+}
+
+function maxSeverity(...levels) {
+  return levels.reduce((current, next) => (
+    severityRank(next) > severityRank(current) ? next : current
+  ), 'healthy');
+}
+
+function buildOpsPrecheck({ overview, logs }) {
+  const services = Array.isArray(overview && overview.services) ? overview.services : [];
+  const alerts = Array.isArray(overview && overview.alerts) ? overview.alerts : [];
+  const logEntries = Array.isArray(logs && logs.entries) ? logs.entries : [];
+  const health = (overview && overview.health) || {};
+
+  const findings = [];
+  const healthLevels = [];
+
+  if (health.db && health.db !== 'ok') {
+    findings.push({
+      level: 'error',
+      title: '数据库健康检查异常',
+      detail: `DB health=${health.db}`
+    });
+    healthLevels.push('critical');
+  }
+
+  if (health.ami && (!health.ami.connected || !health.ami.authenticated)) {
+    findings.push({
+      level: 'error',
+      title: 'AMI 连接异常',
+      detail: `connected=${Boolean(health.ami.connected)}, authenticated=${Boolean(health.ami.authenticated)}`
+    });
+    healthLevels.push('critical');
+  }
+
+  for (const service of services) {
+    const serviceLevel = evaluateServiceLevel(service);
+    healthLevels.push(serviceLevel);
+    if (serviceLevel !== 'healthy') {
+      findings.push({
+        level: serviceLevel === 'critical' ? 'error' : 'warning',
+        title: `服务状态异常: ${service.id || 'unknown'}`,
+        detail: `${service.active_state || 'unknown'}:${service.sub_state || 'unknown'}`
+      });
+    }
+  }
+
+  for (const alert of alerts) {
+    healthLevels.push(alert.level === 'error' ? 'critical' : 'degraded');
+    findings.push({
+      level: alert.level === 'error' ? 'error' : 'warning',
+      title: `指标告警: ${alert.metric || alert.id || 'unknown'}`,
+      detail: alert.message || ''
+    });
+  }
+
+  const errorLogCount = logEntries.filter((entry) => entry.level === 'error').length;
+  const warningLogCount = logEntries.filter((entry) => entry.level === 'warning').length;
+  if (errorLogCount > 0) {
+    healthLevels.push('critical');
+    findings.push({
+      level: 'error',
+      title: '近期日志包含 error',
+      detail: `${errorLogCount} 条 error 日志`
+    });
+  } else if (warningLogCount > 0) {
+    healthLevels.push('degraded');
+    findings.push({
+      level: 'warning',
+      title: '近期日志包含 warning',
+      detail: `${warningLogCount} 条 warning 日志`
+    });
+  }
+
+  const overallStatus = maxSeverity(...healthLevels);
+  return {
+    overall_status: overallStatus === 'critical'
+      ? 'critical'
+      : overallStatus === 'degraded'
+        ? 'degraded'
+        : 'healthy',
+    findings,
+    counters: {
+      services: services.length,
+      alerts: alerts.length,
+      logs: logEntries.length,
+      error_logs: errorLogCount,
+      warning_logs: warningLogCount
+    }
+  };
+}
+
+async function buildOpsOverviewSnapshot({
+  db,
+  amiClient,
+  opsManager,
+  opsLogService,
+  llmDiagnosticsService,
+  config
+}) {
+  const [services] = await Promise.all([
+    opsManager.getServicesStatus()
+  ]);
+
+  const dbState = db.healthCheck();
+  const amiState = amiClient.status();
+  const summary = db.getDashboardSummary();
+  const recentCalls = db.getRecentCalls(10);
+  const recentMessages = typeof db.getRecentMessages === 'function'
+    ? db.getRecentMessages(10)
+    : [];
+  const mem = process.memoryUsage();
+  const metricsBundle = buildOpsMetricsAndAlerts({
+    summary,
+    memoryUsage: mem,
+    loadavg: os.loadavg(),
+    cpuCount: os.cpus().length,
+    totalMem: os.totalmem(),
+    freeMem: os.freemem(),
+    thresholds: config && config.ops ? config.ops.alerts : null
+  });
+  const aiDiagnosticsConfig = llmDiagnosticsService
+    && typeof llmDiagnosticsService.getPublicConfig === 'function'
+    ? llmDiagnosticsService.getPublicConfig()
+    : null;
+
+  return {
+    status: 'ok',
+    generated_at: new Date().toISOString(),
+    host: os.hostname(),
+    uptime_sec: Math.round(process.uptime()),
+    memory: {
+      rss_mb: toMb(mem.rss),
+      heap_used_mb: toMb(mem.heapUsed),
+      heap_total_mb: toMb(mem.heapTotal)
+    },
+    health: {
+      api: 'ok',
+      db: dbState.ok === 1 ? 'ok' : 'error',
+      ami: amiState
+    },
+    services,
+    database: summary,
+    recent_calls: recentCalls,
+    recent_messages: recentMessages,
+    system: metricsBundle.system,
+    metrics: metricsBundle.metrics,
+    thresholds: metricsBundle.thresholds,
+    alerts: metricsBundle.alerts,
+    capabilities: {
+      allow_service_control: Boolean(config.ops.allowServiceControl),
+      managed_services: opsManager.listManagedServices(),
+      log_services: opsLogService ? opsLogService.listManagedServices() : [],
+      ai_diagnostics: aiDiagnosticsConfig || {
+        enabled: false,
+        configured: false,
+        provider: '',
+        model: ''
+      }
+    }
+  };
+}
+
 function maybeWriteAudit(db, payload) {
   if (!db || typeof db.addOpsAuditEvent !== 'function') {
     return;
@@ -65,6 +253,7 @@ function createApp({
   amiClient,
   opsManager,
   opsLogService,
+  llmDiagnosticsService,
   config
 }) {
   const app = express();
@@ -174,57 +363,120 @@ function createApp({
     try {
       ensureOpsEnabled({ opsManager, config });
 
-      const [services] = await Promise.all([
-        opsManager.getServicesStatus()
+      const overview = await buildOpsOverviewSnapshot({
+        db,
+        amiClient,
+        opsManager,
+        opsLogService,
+        llmDiagnosticsService,
+        config
+      });
+
+      res.json(overview);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/v1/ops/diagnostics', async (req, res, next) => {
+    try {
+      ensureOpsEnabled({ opsManager, config });
+      if (!opsLogService) {
+        throw new AppError('Ops log service is unavailable', 503, 'ops_log_service_unavailable');
+      }
+      if (!llmDiagnosticsService || typeof llmDiagnosticsService.analyze !== 'function') {
+        throw new AppError('AI diagnostics service is unavailable', 503, 'llm_diagnostics_unavailable');
+      }
+
+      const actor = getPrincipalId(req);
+      const logLimit = parseLimit(
+        req.body && req.body.log_limit,
+        config && config.llm ? config.llm.diagnosticLogLimit : 120,
+        300
+      );
+      const sinceSecRaw = Number.parseInt(req.body && req.body.since_sec, 10);
+      const sinceSec = Number.isFinite(sinceSecRaw) && sinceSecRaw > 0
+        ? Math.min(sinceSecRaw, 24 * 3600)
+        : (config && config.llm ? config.llm.diagnosticLogSinceSec : 900);
+      const logServices = req.body && req.body.services
+        ? req.body.services
+        : undefined;
+      const logLevels = req.body && req.body.levels
+        ? req.body.levels
+        : 'warning,error';
+
+      const [overview, logs, auditEvents] = await Promise.all([
+        buildOpsOverviewSnapshot({
+          db,
+          amiClient,
+          opsManager,
+          opsLogService,
+          llmDiagnosticsService,
+          config
+        }),
+        opsLogService.getLogs({
+          services: logServices,
+          levels: logLevels,
+          sinceSec,
+          limit: logLimit
+        }),
+        db && typeof db.listOpsAuditEvents === 'function'
+          ? Promise.resolve(db.listOpsAuditEvents(20))
+          : Promise.resolve([])
       ]);
 
-      const dbState = db.healthCheck();
-      const amiState = amiClient.status();
-      const summary = db.getDashboardSummary();
-      const recentCalls = db.getRecentCalls(10);
-      const recentMessages = typeof db.getRecentMessages === 'function'
-        ? db.getRecentMessages(10)
-        : [];
-      const mem = process.memoryUsage();
-      const metricsBundle = buildOpsMetricsAndAlerts({
-        summary,
-        memoryUsage: mem,
-        loadavg: os.loadavg(),
-        cpuCount: os.cpus().length,
-        totalMem: os.totalmem(),
-        freeMem: os.freemem(),
-        thresholds: config && config.ops ? config.ops.alerts : null
-      });
+      const precheck = buildOpsPrecheck({ overview, logs });
+      const snapshot = {
+        collected_at: new Date().toISOString(),
+        actor,
+        precheck,
+        overview,
+        logs,
+        audit_events: auditEvents
+      };
 
-      res.json({
-        status: 'ok',
-        generated_at: new Date().toISOString(),
-        host: os.hostname(),
-        uptime_sec: Math.round(process.uptime()),
-        memory: {
-          rss_mb: toMb(mem.rss),
-          heap_used_mb: toMb(mem.heapUsed),
-          heap_total_mb: toMb(mem.heapTotal)
-        },
-        health: {
-          api: 'ok',
-          db: dbState.ok === 1 ? 'ok' : 'error',
-          ami: amiState
-        },
-        services,
-        database: summary,
-        recent_calls: recentCalls,
-        recent_messages: recentMessages,
-        system: metricsBundle.system,
-        metrics: metricsBundle.metrics,
-        thresholds: metricsBundle.thresholds,
-        alerts: metricsBundle.alerts,
-        capabilities: {
-          allow_service_control: Boolean(config.ops.allowServiceControl),
-          managed_services: opsManager.listManagedServices(),
-          log_services: opsLogService ? opsLogService.listManagedServices() : []
+      try {
+        const result = await llmDiagnosticsService.analyze(snapshot);
+        maybeWriteAudit(db, {
+          actor,
+          action: 'ai_diagnostics_requested',
+          target: 'dashboard.ai_diagnostics',
+          result: 'success',
+          details: {
+            overall_status: result.diagnosis && result.diagnosis.overall_status,
+            confidence: result.diagnosis && result.diagnosis.confidence,
+            model: result.analyzer && result.analyzer.model,
+            log_entries: logs.entries.length
+          }
+        });
+
+        res.json({
+          status: 'ok',
+          generated_at: result.generated_at,
+          precheck,
+          analyzer: result.analyzer,
+          diagnosis: result.diagnosis,
+          logs_warnings: logs.warnings,
+          usage: result.usage,
+          raw_response_parseable: result.raw_response_parseable
+        });
+      } catch (error) {
+        try {
+          maybeWriteAudit(db, {
+            actor,
+            action: 'ai_diagnostics_requested',
+            target: 'dashboard.ai_diagnostics',
+            result: 'failed',
+            details: {
+              code: error.code || 'llm_diagnostics_failed',
+              message: error.message
+            }
+          });
+        } catch (auditError) {
+          // ignore audit write errors to avoid shadowing the original error
         }
-      });
+        throw error;
+      }
     } catch (error) {
       next(error);
     }

@@ -248,6 +248,130 @@ input[type='text']:focus {
   border-color: #f0b7b3;
 }
 
+.ai-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.ai-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(320px 160px at 100% 0%, rgba(39, 94, 166, 0.13), transparent 70%),
+    radial-gradient(260px 160px at 0% 100%, rgba(43, 106, 97, 0.12), transparent 70%);
+}
+
+.ai-card > * {
+  position: relative;
+}
+
+.ai-diagnostics-result {
+  display: grid;
+  gap: 12px;
+}
+
+.ai-diagnostics-result h3 {
+  margin: 4px 0 0;
+  font-size: 0.92rem;
+}
+
+.ai-diagnostics-header {
+  display: grid;
+  gap: 10px;
+}
+
+.ai-summary {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--md-text);
+}
+
+.ai-findings {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-finding {
+  border-radius: 16px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--md-outline) 48%, transparent);
+}
+
+.ai-finding.warning {
+  background: #fff8ec;
+  border-color: #f4d1a2;
+}
+
+.ai-finding.error {
+  background: #fff1f0;
+  border-color: #f0b7b3;
+}
+
+.ai-finding strong {
+  display: block;
+  font-size: 0.88rem;
+}
+
+.ai-finding p {
+  margin: 6px 0 0;
+  color: var(--md-text-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.ai-finding small {
+  display: block;
+  margin-top: 6px;
+  color: var(--md-text-muted);
+  line-height: 1.45;
+}
+
+.ai-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--md-text-muted);
+  display: grid;
+  gap: 5px;
+}
+
+.command-list {
+  display: grid;
+  gap: 8px;
+}
+
+.command-card {
+  border-radius: 16px;
+  padding: 10px 12px;
+  background: #101827;
+  color: #f4f7fb;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.command-card code {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.84rem;
+  color: #d7e8ff;
+}
+
+.command-card p {
+  margin: 8px 0 0;
+  color: #cbd5e1;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.command-card small {
+  display: block;
+  margin-top: 6px;
+  color: #9fb1c7;
+}
+
 .chart-wrap {
   width: 100%;
   min-height: 220px;
@@ -664,6 +788,7 @@ th {
     grid-template-areas:
       'auth summary'
       'alerts load'
+      'ai load'
       'services services'
       'logs logs'
       'audit calls'
@@ -680,6 +805,10 @@ th {
 
   .alerts-card {
     grid-area: alerts;
+  }
+
+  .ai-card {
+    grid-area: ai;
   }
 
   .load-card {
